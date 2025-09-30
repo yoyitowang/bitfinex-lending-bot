@@ -5,11 +5,14 @@ This project provides a modular Python implementation to interact with Bitfinex'
 ## Features
 
 - Modular API client (`bitfinex_api.py`)
+- Authenticated API client (`authenticated_api.py`) for private endpoints
 - CLI interface using Click (`cli.py`)
 - Support for public funding endpoints:
   - Funding Ticker
   - Funding Order Book
   - Funding Trades History
+- Support for authenticated account endpoints:
+  - Wallets
 
 ## Installation
 
@@ -18,6 +21,20 @@ This project provides a modular Python implementation to interact with Bitfinex'
 
 ```bash
 pip install -r requirements.txt
+```
+
+3. For authenticated endpoints, copy `.env.example` to `.env` and fill in your Bitfinex API credentials:
+
+```bash
+cp .env.example .env
+# Edit .env with your actual credentials
+```
+
+Or set environment variables directly:
+
+```bash
+export BITFINEX_API_KEY="your_api_key"
+export BITFINEX_API_SECRET="your_api_secret"
 ```
 
 ## Usage
@@ -35,6 +52,9 @@ python cli.py funding-book --symbol BTC
 
 # Get recent funding trades for USD
 python cli.py funding-trades --symbol USD --limit 50
+
+# Get account wallets (requires API credentials)
+python cli.py wallets
 
 ```
 
