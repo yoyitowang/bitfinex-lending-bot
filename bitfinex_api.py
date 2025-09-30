@@ -36,29 +36,6 @@ class BitfinexAPI:
             params['end'] = end
         return self._make_request(endpoint, params)
 
-    def get_funding_stats(self, key: str, size: str, symbol: str, side: Optional[str] = None) -> Optional[List[List]]:
-        """Get funding stats"""
-        endpoint = f"/stats1/{key}:{size}:f{symbol}"
-        if side:
-            endpoint += f"/{side}"
-        return self._make_request(endpoint)
-
-    def get_funding_candles(self, timeframe: str, symbol: str, limit: int = 100,
-                            start: Optional[int] = None, end: Optional[int] = None) -> Optional[List[List]]:
-        """Get funding candles (OHLC)"""
-        endpoint = f"/candles/trade:{timeframe}:f{symbol}/hist"
-        params = {'limit': limit}
-        if start:
-            params['start'] = start
-        if end:
-            params['end'] = end
-        return self._make_request(endpoint, params)
-
-    def get_derivative_status(self, keys: str) -> Optional[List]:
-        """Get derivative/funding status"""
-        endpoint = "/status/deriv"
-        params = {'keys': keys}
-        return self._make_request(endpoint, params)
 
 # Example usage
 if __name__ == "__main__":
