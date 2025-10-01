@@ -1,13 +1,17 @@
 import click
 import os
 import platform
-from typing import Dict, Any
+import time
+from typing import Dict, Any, Optional, List
+from dataclasses import dataclass
+from collections import defaultdict
 from bitfinex_api import BitfinexAPI
 from authenticated_api import AuthenticatedBitfinexAPI
 from funding_market_analyzer import FundingMarketAnalyzer, FundingMarketAnalysis
 from rich.console import Console, Group
 from rich.table import Table
 from rich.panel import Panel
+from rich.prompt import Confirm
 
 console = Console()
 
@@ -38,8 +42,8 @@ def format_funding_book(data, symbol):
 
         for entry in data[:20]:  # Show first 20 entries
             rate, period, count, amount = entry
-            daily_rate_pct = f"{rate*100:.4f}%"
-            yearly_rate_pct = f"{rate*365*100:.2f}%"
+            daily_rate_pct = f"{rate*100:.6f}%"
+            yearly_rate_pct = f"{rate*365*100:.4f}%"
             amount_type = "LEND" if amount < 0 else "BORROW"
             table.add_row(
                 daily_rate_pct,
@@ -62,8 +66,8 @@ def format_funding_book(data, symbol):
 
         for i, entry in enumerate(data[:20]):
             rate, period, count, amount = entry
-            amount_type = "LEND" if amount < 0 else "BORROW"
-            output += f"{rate*100:<12.4f}% {rate*365*100:<12.2f}% {int(period):<8}d {int(count):<8} {abs(amount):<15,.2f} {amount_type:<8}\n"
+            amount_type = "LEND" if amount > 0 else "BORROW"
+            output += f"{rate*100:<12.6f}% {rate*365*100:<12.4f}% {int(period):<8}d {int(count):<8} {abs(amount):<15,.2f} {amount_type:<8}\n"
 
         return output.strip()
 
@@ -86,8 +90,8 @@ def format_funding_trades(data, symbol):
 
         for trade in data[:20]:  # Show first 20 trades
             trade_id, timestamp, amount, rate, period = trade
-            daily_rate_pct = f"{rate*100:.4f}%"
-            yearly_rate_pct = f"{rate*365*100:.2f}%"
+            daily_rate_pct = f"{rate*100:.6f}%"
+            yearly_rate_pct = f"{rate*365*100:.4f}%"
             # Convert timestamp to readable format
             from datetime import datetime
             dt = datetime.fromtimestamp(timestamp / 1000)
@@ -117,7 +121,7 @@ def format_funding_trades(data, symbol):
             from datetime import datetime
             dt = datetime.fromtimestamp(timestamp / 1000)
             time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-            output += f"{trade_id:<10} {time_str:<20} {amount:<15,.2f} {rate*100:<12.4f}% {rate*365*100:<12.2f}% {int(period):<8}d\n"
+            output += f"{trade_id:<10} {time_str:<20} {amount:<15,.2f} {rate*100:<12.6f}% {rate*365*100:<12.4f}% {int(period):<8}d\n"
 
         return output.strip()
 
@@ -216,7 +220,7 @@ def format_funding_offers(data):
             status = getattr(offer, 'status', 'Active')
             yearly_rate = rate * 365
 
-            output += f"{symbol:<8} {amount:<12,.2f} {rate*100:<12.4f}% {yearly_rate*100:<12.2f}% {period:<8}d {status:<10}\n"
+            output += f"{symbol:<8} {amount:<12,.2f} {rate*100:<12.6f}% {yearly_rate*100:<12.4f}% {period:<8}d {status:<10}\n"
 
         return output.strip()
 
@@ -249,8 +253,8 @@ def format_funding_loans(data):
             table.add_row(
                 symbol,
                 f"{amount:,.2f}",
-                f"{rate*100:.4f}%",
-                f"{yearly_rate*100:.2f}%",
+                f"{rate*100:.6f}%",
+                f"{yearly_rate*100:.4f}%",
                 f"{period}d",
                 status
             )
@@ -273,7 +277,7 @@ def format_funding_loans(data):
             status = getattr(loan, 'status', 'Active')
             yearly_rate = rate * 365
 
-            output += f"{symbol:<8} {amount:<12,.2f} {rate*100:<12.4f}% {yearly_rate*100:<12.2f}% {period:<8}d {status:<10}\n"
+            output += f"{symbol:<8} {amount:<12,.2f} {rate*100:<12.6f}% {yearly_rate*100:<12.4f}% {period:<8}d {status:<10}\n"
 
         return output.strip()
 
@@ -306,8 +310,8 @@ def format_funding_credits(data):
             table.add_row(
                 symbol,
                 f"{amount:,.2f}",
-                f"{rate*100:.4f}%",
-                f"{yearly_rate*100:.2f}%",
+                f"{rate*100:.6f}%",
+                f"{yearly_rate*100:.4f}%",
                 f"{period}d",
                 status
             )
@@ -330,7 +334,7 @@ def format_funding_credits(data):
             status = getattr(credit, 'status', 'Active')
             yearly_rate = rate * 365
 
-            output += f"{symbol:<8} {amount:<12,.2f} {rate*100:<12.4f}% {yearly_rate*100:<12.2f}% {period:<8}d {status:<10}\n"
+            output += f"{symbol:<8} {amount:<12,.2f} {rate*100:<12.6f}% {yearly_rate*100:<12.4f}% {period:<8}d {status:<10}\n"
 
         return output.strip()
 
@@ -718,18 +722,18 @@ def format_funding_ticker(data, symbol):
         table.add_column("Yearly Rate", style="yellow", justify="right")
 
         # Add rows - only for rate fields
-        table.add_row("FRR (Flash Return Rate)", f"{data[0]*100:.4f}%", f"{data[0]*365*100:.2f}%")
-        table.add_row("Best Bid", f"{data[1]*100:.4f}%", f"{data[1]*365*100:.2f}%")
+        table.add_row("FRR (Flash Return Rate)", f"{data[0]*100:.6f}%", f"{data[0]*365*100:.4f}%")
+        table.add_row("Best Bid", f"{data[1]*100:.6f}%", f"{data[1]*365*100:.4f}%")
         table.add_row("Bid Period", f"{int(data[2])} days", "")
         table.add_row("Bid Size", f"{data[3]:,.2f}", "")
-        table.add_row("Best Ask", f"{data[4]*100:.4f}%", f"{data[4]*365*100:.2f}%")
+        table.add_row("Best Ask", f"{data[4]*100:.6f}%", f"{data[4]*365*100:.4f}%")
         table.add_row("Ask Period", f"{int(data[5])} days", "")
         table.add_row("Ask Size", f"{data[6]:,.2f}", "")
         table.add_row("Daily Change", f"{data[8]:.4f}%", f"{data[8]*365:.2f}%")
-        table.add_row("Last Price", f"{data[9]*100:.4f}%", f"{data[9]*365*100:.2f}%")
+        table.add_row("Last Price", f"{data[9]*100:.6f}%", f"{data[9]*365*100:.4f}%")
         table.add_row("24h Volume", f"{data[10]:,.2f}", "")
-        table.add_row("24h High", f"{data[11]*100:.4f}%", f"{data[11]*365*100:.2f}%")
-        table.add_row("24h Low", f"{data[12]*100:.4f}%", f"{data[12]*365*100:.2f}%")
+        table.add_row("24h High", f"{data[11]*100:.6f}%", f"{data[11]*365*100:.4f}%")
+        table.add_row("24h Low", f"{data[12]*100:.6f}%", f"{data[12]*365*100:.4f}%")
         table.add_row("FRR Amount Available", f"{data[15]:,.2f}", "")
 
         # Create a panel with the table
@@ -744,18 +748,18 @@ def format_funding_ticker(data, symbol):
         formatted = f"""
 Bitfinex Funding Market Data - f{symbol}
 {'='*60}
-FRR (Flash Return Rate):     {data[0]*100:.4f}% (Yearly: {data[0]*365*100:.2f}%)
-Best Bid:                   {data[1]*100:.4f}% (Yearly: {data[1]*365*100:.2f}%)
+FRR (Flash Return Rate):     {data[0]*100:.6f}% (Yearly: {data[0]*365*100:.4f}%)
+Best Bid:                   {data[1]*100:.6f}% (Yearly: {data[1]*365*100:.4f}%)
 Bid Period:                {int(data[2])} days
 Bid Size:                  {data[3]:,.2f}
-Best Ask:                   {data[4]*100:.4f}% (Yearly: {data[4]*365*100:.2f}%)
+Best Ask:                   {data[4]*100:.6f}% (Yearly: {data[4]*365*100:.4f}%)
 Ask Period:                {int(data[5])} days
 Ask Size:                  {data[6]:,.2f}
 Daily Change:              {data[8]:.4f}% (Yearly: {data[8]*365:.2f}%)
-Last Price:                {data[9]*100:.4f}% (Yearly: {data[9]*365*100:.2f}%)
+Last Price:                {data[9]*100:.6f}% (Yearly: {data[9]*365*100:.4f}%)
 24h Volume:                {data[10]:,.2f}
-24h High:                  {data[11]*100:.4f}% (Yearly: {data[11]*365*100:.2f}%)
-24h Low:                   {data[12]*100:.4f}% (Yearly: {data[12]*365*100:.2f}%)
+24h High:                  {data[11]*100:.6f}% (Yearly: {data[11]*365*100:.4f}%)
+24h Low:                   {data[12]*100:.6f}% (Yearly: {data[12]*365*100:.4f}%)
 FRR Amount Available:      {data[15]:,.2f}
 {'='*60}
 """
@@ -967,6 +971,743 @@ def auto_lending_check(symbol, period, min_confidence, api_key, api_secret):
     except ValueError as e:
         print(f"Error: {e}")
         print("Please set BITFINEX_API_KEY and BITFINEX_API_SECRET environment variables or provide them as options.")
+
+@dataclass
+class MarketRateStats:
+    """Market rate statistics for a specific period"""
+    period_days: int
+    avg_daily_rate: float
+    max_daily_rate: float
+    min_daily_rate: float
+    median_daily_rate: float
+    volume_weighted_avg_daily_rate: float
+    count: int
+    total_volume: float
+    avg_yearly_rate: float
+    max_yearly_rate: float
+    min_yearly_rate: float
+    median_yearly_rate: float
+    volume_weighted_avg_yearly_rate: float
+    top_3_rates: List[float]  # Top 3 highest rates for stability analysis
+
+@dataclass
+class TieredMarketAnalysis:
+    """Tiered market analysis by time periods"""
+    symbol: str
+    tiers: Dict[str, MarketRateStats]  # tier_name -> stats
+    high_yield_opportunities: List[Dict[str, Any]]  # High yield opportunities >=15% APY
+    recommended_tier: str
+    recommended_approach: str  # "high_yield" or "standard"
+    market_signals: Dict[str, Any]  # Market signals from analyzer
+
+@dataclass
+class LendingRecommendation:
+    """Lending rate recommendation"""
+    symbol: str
+    recommended_daily_rate: float
+    recommended_yearly_rate: float
+    market_max_rate: float
+    increment: float
+    confidence_score: float
+    reasoning: str
+
+@dataclass
+class LendingOrder:
+    """Individual lending order"""
+    amount: float
+    daily_rate: float
+    period_days: int
+    yearly_rate: float
+
+class FundingLendingAutomation:
+    """Automated funding lending system"""
+
+    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None, rate_interval: float = 0.00005):
+        self.public_api = BitfinexAPI()
+        self.auth_api = None
+        if api_key and api_secret:
+            self.auth_api = AuthenticatedBitfinexAPI(api_key, api_secret)
+        self.console = Console()
+        self.rate_interval = rate_interval
+        self.lowest_offer_rate = None
+
+    def analyze_market_rates(self, symbol: str) -> Dict[int, MarketRateStats]:
+        """
+        Analyze market rates from funding book and trades data
+
+        Returns dict mapping period_days to MarketRateStats
+        """
+        period_stats = defaultdict(lambda: {
+            'rates': [],
+            'volumes': [],  # For volume-weighted calculations
+            'count': 0
+        })
+
+        # Get funding book data
+        book_data = self.public_api.get_funding_book(symbol, precision='P0')
+        self.lowest_offer_rate = None
+        if book_data:
+            for entry in book_data[:100]:  # Analyze top 100 entries for better stats
+                rate, period, count, amount = entry
+                if amount > 0:  # Lending offers (positive amounts in funding book)
+                    volume = amount  # Positive volume
+                    period_stats[period]['rates'].append(rate)
+                    period_stats[period]['volumes'].append(volume)
+                    period_stats[period]['count'] += int(count)
+                    # Track the lowest offer rate across all periods
+                    if self.lowest_offer_rate is None or rate < self.lowest_offer_rate:
+                        self.lowest_offer_rate = rate
+
+        # Get recent trades data
+        trades_data = self.public_api.get_funding_trades(symbol, limit=200)
+        if trades_data:
+            for trade in trades_data:
+                trade_id, timestamp, amount, rate, period = trade
+                if amount > 0:  # Successful lending transactions
+                    volume = abs(amount)
+                    period_stats[period]['rates'].append(rate)
+                    period_stats[period]['volumes'].append(volume)
+                    period_stats[period]['count'] += 1
+
+        # Calculate statistics
+        result = {}
+        for period, data in period_stats.items():
+            if data['rates']:
+                rates = data['rates']
+                volumes = data['volumes']
+
+                # Basic statistics
+                avg_rate = sum(rates) / len(rates)
+                max_rate = max(rates)
+                min_rate = min(rates)
+                sorted_rates = sorted(rates)
+                median_rate = sorted_rates[len(sorted_rates) // 2]
+
+                # Volume-weighted average
+                if volumes and len(volumes) == len(rates):
+                    total_volume = sum(volumes)
+                    weighted_sum = sum(rate * vol for rate, vol in zip(rates, volumes))
+                    volume_weighted_avg = weighted_sum / total_volume if total_volume > 0 else avg_rate
+                else:
+                    volume_weighted_avg = avg_rate
+                    total_volume = sum(volumes) if volumes else 0
+
+                # Top 3 rates (for stability analysis)
+                top_3_rates = sorted(rates, reverse=True)[:3]
+
+                result[period] = MarketRateStats(
+                    period_days=period,
+                    avg_daily_rate=avg_rate,
+                    max_daily_rate=max_rate,
+                    min_daily_rate=min_rate,
+                    median_daily_rate=median_rate,
+                    volume_weighted_avg_daily_rate=volume_weighted_avg,
+                    count=data['count'],
+                    total_volume=total_volume,
+                    avg_yearly_rate=avg_rate * 365,
+                    max_yearly_rate=max_rate * 365,
+                    min_yearly_rate=min_rate * 365,
+                    median_yearly_rate=median_rate * 365,
+                    volume_weighted_avg_yearly_rate=volume_weighted_avg * 365,
+                    top_3_rates=top_3_rates
+                )
+
+        return result
+
+    def analyze_tiered_market(self, symbol: str) -> TieredMarketAnalysis:
+        """
+        Analyze market rates by tiered time periods
+
+        Tiers:
+        - 2d: 2 days
+        - 14d: 2 weeks (14 days)
+        - 30d: 1 month (30 days)
+        - 60d: 2 months (60 days)
+        - 90d: 3 months (90 days)
+        - 120d+: Long term (120+ days)
+
+        Returns TieredMarketAnalysis with comprehensive statistics
+        """
+        # Get all period data
+        all_stats = self.analyze_market_rates(symbol)
+
+        # Define tier mappings
+        tier_definitions = {
+            '2d': [2],
+            '14d': [7, 14],  # Include 7d if available
+            '30d': [30],
+            '60d': [60],
+            '90d': [90],
+            '120d+': [120, 180, 365]  # Long term periods
+        }
+
+        tiers = {}
+        high_yield_opportunities = []
+
+        # Analyze each tier
+        for tier_name, periods in tier_definitions.items():
+            tier_rates = []
+            tier_volumes = []
+            tier_counts = 0
+            tier_total_volume = 0
+
+            for period in periods:
+                if period in all_stats:
+                    stats = all_stats[period]
+                    tier_rates.extend([stats.avg_daily_rate] * stats.count)  # Weight by count
+                    tier_volumes.extend([stats.volume_weighted_avg_daily_rate] * stats.count)
+                    tier_counts += stats.count
+                    tier_total_volume += stats.total_volume
+
+                    # Check for high yield opportunities (>=15% APY, 30+ days, substantial volume)
+                    if period >= 30 and stats.max_yearly_rate >= 0.15 and stats.total_volume > 1000:
+                        high_yield_opportunities.append({
+                            'tier': tier_name,
+                            'period': period,
+                            'max_apy': stats.max_yearly_rate,
+                            'volume_weighted_rate': stats.volume_weighted_avg_daily_rate,
+                            'volume_weighted_apy': stats.volume_weighted_avg_yearly_rate,
+                            'total_volume': stats.total_volume,
+                            'order_count': stats.count
+                        })
+
+            if tier_rates:
+                # Calculate tier statistics
+                avg_daily_rate = sum(tier_rates) / len(tier_rates)
+                max_daily_rate = max(tier_rates)
+                min_daily_rate = min(tier_rates)
+                sorted_rates = sorted(tier_rates)
+                median_daily_rate = sorted_rates[len(sorted_rates) // 2]
+
+                # Volume-weighted average
+                if tier_volumes:
+                    volume_weighted_avg = sum(tier_volumes) / len(tier_volumes)
+                else:
+                    volume_weighted_avg = avg_daily_rate
+
+                # Collect top rates from all periods in this tier
+                all_tier_rates = []
+                for period in periods:
+                    if period in all_stats:
+                        all_tier_rates.extend(all_stats[period].top_3_rates)
+
+                top_3_rates = sorted(list(set(all_tier_rates)), reverse=True)[:3]
+
+                tiers[tier_name] = MarketRateStats(
+                    period_days=max(periods),  # Use max period as representative
+                    avg_daily_rate=avg_daily_rate,
+                    max_daily_rate=max_daily_rate,
+                    min_daily_rate=min_daily_rate,
+                    median_daily_rate=median_daily_rate,
+                    volume_weighted_avg_daily_rate=volume_weighted_avg,
+                    count=tier_counts,
+                    total_volume=tier_total_volume,
+                    avg_yearly_rate=avg_daily_rate * 365,
+                    max_yearly_rate=max_daily_rate * 365,
+                    min_yearly_rate=min_daily_rate * 365,
+                    median_yearly_rate=median_daily_rate * 365,
+                    volume_weighted_avg_yearly_rate=volume_weighted_avg * 365,
+                    top_3_rates=top_3_rates
+                )
+
+        # Determine recommended approach
+        recommended_tier = '2d'  # Default to shortest term
+        recommended_approach = 'standard'
+
+        if high_yield_opportunities:
+            # Sort by APY descending, then by volume descending
+            high_yield_opportunities.sort(key=lambda x: (x['volume_weighted_apy'], x['total_volume']), reverse=True)
+            best_opportunity = high_yield_opportunities[0]
+            recommended_tier = best_opportunity['tier']
+            recommended_approach = 'high_yield'
+        elif '2d' not in tiers and tiers:
+            # If no 2d tier, use the shortest available
+            recommended_tier = min(tiers.keys(), key=lambda x: int(x.rstrip('d+')))
+
+        # Get market signals from analyzer (if available)
+        market_signals = {}
+        try:
+            analyzer = FundingMarketAnalyzer()
+            analysis = analyzer.get_strategy_recommendations(symbol)
+            if analysis and hasattr(analysis, 'market_conditions'):
+                market_signals = {
+                    'market_conditions': analysis.market_conditions,
+                    'trend_direction': getattr(analysis.market_stats, 'trend_direction', 'unknown'),
+                    'liquidity_score': getattr(analysis.market_stats, 'market_depth_score', 0.5)
+                }
+        except:
+            market_signals = {'error': 'Could not retrieve market signals'}
+
+        return TieredMarketAnalysis(
+            symbol=symbol,
+            tiers=tiers,
+            high_yield_opportunities=high_yield_opportunities,
+            recommended_tier=recommended_tier,
+            recommended_approach=recommended_approach,
+            market_signals=market_signals
+        )
+
+    def generate_recommendation(self, symbol: str, target_period: int = 30) -> LendingRecommendation:
+        """
+        Generate lending rate recommendation based on tiered market analysis
+
+        Strategy:
+        1. Check for high-yield opportunities (>=15% APY, 30+ days, substantial volume)
+        2. If found, recommend volume-weighted average rate for immediate adoption
+        3. Otherwise, use standard strategy with shortest viable tier (2 days)
+           at median rate adjusted by -0.01% for quick fills
+
+        Args:
+            symbol: Funding symbol (e.g., 'USD')
+            target_period: Target lending period in days (legacy parameter)
+
+        Returns:
+            LendingRecommendation with suggested rates and detailed reasoning
+        """
+        tiered_analysis = self.analyze_tiered_market(symbol)
+
+        if not tiered_analysis.tiers:
+            return LendingRecommendation(
+                symbol=symbol,
+                recommended_daily_rate=0.001,  # 0.1% default
+                recommended_yearly_rate=0.365,
+                market_max_rate=0.001,
+                increment=0.0001,
+                confidence_score=0.0,
+                reasoning="No market data available, using conservative default"
+            )
+
+        # Strategy 1: Immediate Adoption Priority - High Yield Opportunities
+        if tiered_analysis.high_yield_opportunities:
+            best_opportunity = tiered_analysis.high_yield_opportunities[0]  # Already sorted by APY and volume
+
+            recommended_daily_rate = best_opportunity['volume_weighted_rate']
+            recommended_yearly_rate = best_opportunity['volume_weighted_apy']
+
+            reasoning = f"🚀 HIGH-YIELD LONG-TERM OPPORTUNITY DETECTED! 🚀\n"
+            reasoning += f"• Tier: {best_opportunity['tier']} ({best_opportunity['period']} days)\n"
+            reasoning += f"• Annual Return: {recommended_yearly_rate:.1f}% APY\n"
+            reasoning += f"• Daily Rate: {recommended_daily_rate*100:.4f}%\n"
+            reasoning += f"• Market Volume: ${best_opportunity['total_volume']:,.0f}\n"
+            reasoning += f"• Order Count: {best_opportunity['order_count']}\n"
+            reasoning += "• RECOMMENDATION: Adopt immediately at volume-weighted rate!\n"
+            reasoning += f"• Strategy: Maximize returns on proven high-yield tier"
+
+            return LendingRecommendation(
+                symbol=symbol,
+                recommended_daily_rate=recommended_daily_rate,
+                recommended_yearly_rate=recommended_yearly_rate,
+                market_max_rate=recommended_daily_rate,  # Using volume-weighted as market rate
+                increment=0.0,  # No increment for high-yield opportunities
+                confidence_score=0.95,  # High confidence for validated opportunities
+                reasoning=reasoning
+            )
+
+        # Strategy 2: Standard Judgment - Use funding book's lowest offer rate
+        if self.lowest_offer_rate is not None and '2d' in tiered_analysis.tiers:
+            tier_stats = tiered_analysis.tiers['2d']
+            base_rate = self.lowest_offer_rate
+            recommended_daily_rate = base_rate  # Start from the lowest offer rate
+
+            # Check market signals to avoid over-lending in illiquid periods
+            market_signals = tiered_analysis.market_signals
+            liquidity_score = market_signals.get('liquidity_score', 0.5)
+
+            if liquidity_score < 0.3:
+                # Slightly increase rate in low liquidity periods to avoid being too competitive
+                recommended_daily_rate *= 1.05
+                reasoning_modifier = " (Conservative adjustment for low liquidity)"
+            else:
+                reasoning_modifier = ""
+
+            reasoning = f"📊 STANDARD STRATEGY - Market-Based Rate Progression 📊\n"
+            reasoning += f"• Base Rate: {base_rate*100:.4f}% (lowest offer in funding book)\n"
+            reasoning += f"• Rate Interval: {self.rate_interval*100:.4f}% between orders\n"
+            reasoning += f"• Order Strategy: Start from market lowest, increment by interval\n"
+            reasoning += f"• Annual Return Base: {recommended_daily_rate*365:.2f}% APY\n"
+            reasoning += f"• Market Activity: {tier_stats.count} orders\n"
+            reasoning += f"• Liquidity Score: {liquidity_score:.2f}{reasoning_modifier}\n"
+            reasoning += "• Strategy: Place orders at market rates, incrementally higher to avoid instant fills"
+
+        elif '2d' in tiered_analysis.tiers:
+            # Fallback: Use 2d tier median if lowest offer rate not available
+            tier_stats = tiered_analysis.tiers['2d']
+
+            # Use median rate adjusted by -0.01% for quick fills while staying competitive
+            base_rate = tier_stats.median_daily_rate
+            adjustment = -0.0001  # -0.01% adjustment
+            recommended_daily_rate = max(base_rate + adjustment, tier_stats.min_daily_rate)  # Don't go below market minimum
+
+            # Check market signals to avoid over-lending in illiquid periods
+            market_signals = tiered_analysis.market_signals
+            liquidity_score = market_signals.get('liquidity_score', 0.5)
+
+            if liquidity_score < 0.3:
+                # Reduce recommendation in low liquidity periods
+                recommended_daily_rate *= 0.9
+                reasoning_modifier = " (Conservative adjustment for low liquidity)"
+            else:
+                reasoning_modifier = ""
+
+            reasoning = f"📊 STANDARD STRATEGY - Statistical Median 📊\n"
+            reasoning += f"• Selected Tier: 2 days (shortest viable term)\n"
+            reasoning += f"• Base Rate: {tier_stats.median_daily_rate*100:.4f}% (market median)\n"
+            reasoning += f"• Adjustment: {adjustment*100:.2f}% (for quick fills)\n"
+            reasoning += f"• Final Rate: {recommended_daily_rate*100:.4f}% daily\n"
+            reasoning += f"• Annual Return: {recommended_daily_rate*365:.2f}% APY\n"
+            reasoning += f"• Market Activity: {tier_stats.count} orders\n"
+            reasoning += f"• Liquidity Score: {liquidity_score:.2f}{reasoning_modifier}\n"
+            reasoning += "• Strategy: Balance speed of execution with competitive rates (fallback mode)"
+        elif tiered_analysis.tiers:
+            # If no 2d tier available, use shortest available tier
+            shortest_tier = min(tiered_analysis.tiers.keys(),
+                              key=lambda x: int(x.rstrip('d+')))
+            tier_stats = tiered_analysis.tiers[shortest_tier]
+
+            recommended_daily_rate = tier_stats.median_daily_rate
+
+            reasoning = f"📊 STANDARD STRATEGY - Alternative Short-term 📊\n"
+            reasoning += f"• Selected Tier: {shortest_tier} (shortest available)\n"
+            reasoning += f"• Market Median: {tier_stats.median_daily_rate*100:.4f}% daily\n"
+            reasoning += f"• Annual Return: {recommended_daily_rate*365:.2f}% APY\n"
+            reasoning += f"• Market Activity: {tier_stats.count} orders\n"
+            reasoning += "• Note: 2-day tier not available, using best alternative"
+        else:
+            # Fallback
+            return LendingRecommendation(
+                symbol=symbol,
+                recommended_daily_rate=0.001,
+                recommended_yearly_rate=0.365,
+                market_max_rate=0.001,
+                increment=0.0001,
+                confidence_score=0.0,
+                reasoning="Insufficient market data for tiered analysis, using conservative default"
+            )
+
+        # Calculate confidence score based on market activity and signals
+        base_confidence = min(1.0, tier_stats.count / 20.0)
+        liquidity_adjustment = tiered_analysis.market_signals.get('liquidity_score', 0.5) - 0.5
+        confidence_score = max(0.1, base_confidence + liquidity_adjustment)
+
+        return LendingRecommendation(
+            symbol=symbol,
+            recommended_daily_rate=recommended_daily_rate,
+            recommended_yearly_rate=recommended_daily_rate * 365,
+            market_max_rate=tier_stats.max_daily_rate,
+            increment=adjustment if 'adjustment' in locals() else 0.0,
+            confidence_score=confidence_score,
+            reasoning=reasoning
+        )
+
+    def generate_order_strategy(self, recommendation: LendingRecommendation,
+                               total_amount: float, min_order: float,
+                               max_orders: int = 10, target_period: int = 2) -> List[LendingOrder]:
+        """
+        Generate lending orders strategy based on market lowest offer rate
+
+        Strategy:
+        1. Base rate = lowest offer rate from funding book
+        2. Each subsequent order increases by rate_interval (default 0.005%)
+        3. Calculate maximum number of full orders: floor(total_amount / min_order)
+        4. All orders use min_order amount
+
+        Args:
+            recommendation: Rate recommendation (base rate from lowest offer)
+            total_amount: Total amount to lend
+            min_order: Minimum order size
+            max_orders: Maximum number of orders
+            target_period: Target lending period in days
+
+        Returns:
+            List of LendingOrder objects
+        """
+        if total_amount < min_order:
+            return []  # Cannot create even one order
+
+        # Calculate maximum number of full orders
+        num_orders = int(total_amount // min_order)
+        num_orders = min(num_orders, max_orders)  # Respect max_orders limit
+
+        if num_orders == 0:
+            return []
+
+        # Strategy parameters
+        base_rate = recommendation.recommended_daily_rate
+
+        orders = []
+        for i in range(num_orders):
+            # Calculate rate for this order (start from base rate, increment by interval)
+            current_rate = base_rate + (i * self.rate_interval)
+
+            order = LendingOrder(
+                amount=min_order,  # All orders use minimum order size
+                daily_rate=current_rate,
+                period_days=target_period,
+                yearly_rate=current_rate * 365
+            )
+
+            orders.append(order)
+
+        return orders
+
+    def display_market_analysis(self, symbol: str) -> None:
+        """Display comprehensive tiered market analysis"""
+        self.console.print(f"\n[bold blue]📈 Tiered Market Analysis for f{symbol}[/bold blue]")
+
+        tiered_analysis = self.analyze_tiered_market(symbol)
+
+        if not tiered_analysis.tiers:
+            self.console.print("[red]No market data available[/red]")
+            return
+
+        # Create tiered analysis table
+        table = Table(title=f"Funding Market Analysis by Tiers - f{symbol}", show_header=True, header_style="bold magenta")
+        table.add_column("Tier", style="cyan", justify="center")
+        table.add_column("Orders", style="white", justify="right")
+        table.add_column("Volume", style="green", justify="right")
+        table.add_column("Avg APR", style="yellow", justify="right")
+        table.add_column("Median Rate", style="blue", justify="right")
+        table.add_column("Volume Wght", style="magenta", justify="right")
+        table.add_column("Top 3 Rates", style="red", justify="right")
+
+        for tier_name in ['2d', '14d', '30d', '60d', '90d', '120d+']:
+            if tier_name in tiered_analysis.tiers:
+                stats = tiered_analysis.tiers[tier_name]
+                top_3_display = ", ".join([f"{rate*100:.3f}%" for rate in stats.top_3_rates[:3]])
+                table.add_row(
+                    tier_name,
+                    f"{stats.count}",
+                    f"${stats.total_volume:,.0f}",
+                    f"{stats.avg_yearly_rate:.4f}%",
+                    f"{stats.median_daily_rate*100:.4f}%",
+                    f"{stats.volume_weighted_avg_daily_rate*100:.4f}%",
+                    top_3_display
+                )
+
+        self.console.print(table)
+
+        # Display high yield opportunities if any
+        if tiered_analysis.high_yield_opportunities:
+            self.console.print(f"\n[bold green]🚀 High-Yield Opportunities (>=15% APY)[/bold green]")
+
+            opp_table = Table(show_header=True, header_style="bold green")
+            opp_table.add_column("Tier", style="cyan")
+            opp_table.add_column("Period", style="white", justify="right")
+            opp_table.add_column("APY", style="green", justify="right")
+            opp_table.add_column("Volume", style="yellow", justify="right")
+            opp_table.add_column("Orders", style="blue", justify="right")
+
+            for opp in tiered_analysis.high_yield_opportunities[:3]:  # Show top 3
+                opp_table.add_row(
+                    opp['tier'],
+                    f"{opp['period']}d",
+                    f"{opp['volume_weighted_apy']:.1f}%",
+                    f"${opp['total_volume']:,.0f}",
+                    str(opp['order_count'])
+                )
+
+            self.console.print(opp_table)
+
+        # Display market signals
+        if 'error' not in tiered_analysis.market_signals:
+            signals = tiered_analysis.market_signals
+            self.console.print(f"\n[bold cyan]📊 Market Signals[/bold cyan]")
+            signal_table = Table(show_header=False)
+            signal_table.add_column("Signal", style="cyan")
+            signal_table.add_column("Value", style="white")
+
+            signal_table.add_row("Conditions", signals.get('market_conditions', 'Unknown'))
+            signal_table.add_row("Trend", signals.get('trend_direction', 'Unknown'))
+            signal_table.add_row("Liquidity", f"{signals.get('liquidity_score', 0):.2f}")
+
+            self.console.print(signal_table)
+
+        # Display recommendation approach
+        approach_color = "green" if tiered_analysis.recommended_approach == "high_yield" else "blue"
+        self.console.print(f"\n[bold {approach_color}]🎯 Recommended Approach: {tiered_analysis.recommended_approach.upper()}[/bold {approach_color}]")
+        self.console.print(f"[dim]Preferred Tier: {tiered_analysis.recommended_tier}[/dim]")
+
+    def display_recommendation(self, recommendation: LendingRecommendation) -> None:
+        """Display lending recommendation"""
+        self.console.print(f"\n[bold green]Lending Recommendation for f{recommendation.symbol}[/bold green]")
+
+        rec_table = Table(show_header=True, header_style="bold green")
+        rec_table.add_column("Metric", style="cyan")
+        rec_table.add_column("Value", style="green")
+
+        rec_table.add_row("Recommended Daily Rate", f"{recommendation.recommended_daily_rate*100:.6f}%")
+        rec_table.add_row("Recommended Yearly Rate", f"{recommendation.recommended_yearly_rate:.6f}%")
+        rec_table.add_row("Market Max Rate", f"{recommendation.market_max_rate*100:.6f}%")
+        rec_table.add_row("Rate Increment", f"{recommendation.increment*100:.6f}%")
+        rec_table.add_row("Confidence Score", f"{recommendation.confidence_score:.2f}")
+
+        self.console.print(rec_table)
+        self.console.print(f"[dim]{recommendation.reasoning}[/dim]")
+
+    def display_order_strategy(self, orders: List[LendingOrder], symbol: str) -> None:
+        """Display order placement strategy"""
+        if not orders:
+            self.console.print("[red]No orders to display[/red]")
+            return
+
+        self.console.print(f"\n[bold yellow]Order Strategy for f{symbol}[/bold yellow]")
+
+        strategy_table = Table(show_header=True, header_style="bold yellow")
+        strategy_table.add_column("Order #", style="white", justify="center")
+        strategy_table.add_column("Amount", style="green", justify="right")
+        strategy_table.add_column("Daily Rate", style="cyan", justify="right")
+        strategy_table.add_column("Yearly Rate", style="yellow", justify="right")
+        strategy_table.add_column("Period", style="blue", justify="center")
+
+        total_amount = 0
+        for i, order in enumerate(orders, 1):
+            strategy_table.add_row(
+                str(i),
+                f"${order.amount:,.2f}",
+                f"{order.daily_rate*100:.6f}%",
+                f"{order.yearly_rate*100:.4f}%",
+                f"{order.period_days}d"
+            )
+            total_amount += order.amount
+
+        self.console.print(strategy_table)
+        self.console.print(f"[bold]Total Amount: ${total_amount:,.2f}[/bold]")
+
+    def execute_lending_strategy(self, orders: List[LendingOrder], symbol: str) -> bool:
+        """
+        Execute lending orders
+
+        Returns True if successful, False otherwise
+        """
+        if not self.auth_api:
+            self.console.print("[red]API credentials not provided[/red]")
+            return False
+
+        self.console.print(f"\n[bold red]Executing Lending Strategy for f{symbol}[/bold red]")
+
+        successful_orders = 0
+        failed_orders = 0
+
+        for i, order in enumerate(orders, 1):
+            self.console.print(f"Submitting order {i}/{len(orders)}: "
+                             f"${order.amount:.2f} at {order.daily_rate*100:.4f}% for {order.period_days} days")
+
+            try:
+                notification = self.auth_api.post_funding_offer(
+                    symbol=f"f{symbol}",
+                    amount=order.amount,
+                    rate=order.daily_rate,
+                    period=order.period_days
+                )
+
+                if notification and notification.status == "SUCCESS":
+                    self.console.print(f"[green]Order {i} submitted successfully[/green]")
+                    successful_orders += 1
+                else:
+                    error_msg = notification.text if notification else "Unknown error"
+                    self.console.print(f"[red]Order {i} failed: {error_msg}[/red]")
+                    failed_orders += 1
+
+                # Rate limiting - wait between orders
+                time.sleep(0.5)
+
+            except Exception as e:
+                self.console.print(f"[red]Order {i} error: {str(e)}[/red]")
+                failed_orders += 1
+
+        self.console.print(f"\n[bold]Results: {successful_orders} successful, {failed_orders} failed[/bold]")
+        return failed_orders == 0
+
+    def run_automation(self, symbol: str, total_amount: float, min_order: float,
+                      target_period: int = 30, confirm: bool = True) -> bool:
+        """
+        Run the complete lending automation process
+
+        Returns True if successful
+        """
+        try:
+            # Step 1: Analyze market
+            self.display_market_analysis(symbol)
+
+            # Step 2: Generate recommendation
+            recommendation = self.generate_recommendation(symbol, target_period)
+            self.display_recommendation(recommendation)
+
+            # Step 3: Generate order strategy
+            orders = self.generate_order_strategy(
+                recommendation, total_amount, min_order,
+                target_period=target_period  # Pass the target period
+            )
+            self.display_order_strategy(orders, symbol)
+
+            if not orders:
+                self.console.print("[red]No valid orders generated[/red]")
+                return False
+
+            # Step 4: User confirmation
+            if confirm:
+                self.console.print("\n[bold yellow]Confirm Execution[/bold yellow]")
+                confirmed = Confirm.ask("Do you want to proceed with submitting these lending offers?", default=False)
+                if not confirmed:
+                    self.console.print("[yellow]Operation cancelled by user[/yellow]")
+                    return False
+
+            # Step 5: Execute orders
+            success = self.execute_lending_strategy(orders, symbol)
+
+            return success
+
+        except Exception as e:
+            self.console.print(f"[red]Automation failed: {str(e)}[/red]")
+            return False
+
+@cli.command()
+@click.option('--symbol', default='USD', help='Funding currency symbol')
+@click.option('--total-amount', type=float, default=1000.0, help='Total amount to lend')
+@click.option('--min-order', type=float, default=150.0, help='Minimum order size')
+@click.option('--max-rate-increment', type=float, default=0.0001, help='Maximum rate increment from base in decimal (0.0001 = 0.01%)')
+@click.option('--rate-interval', type=float, default=0.00005, help='Rate interval between orders in decimal (0.00005 = 0.005%)')
+@click.option('--target-period', type=int, default=2, help='Target lending period in days (2 = shortest term)')
+@click.option('--no-confirm', is_flag=True, help='Skip user confirmation (use with caution)')
+@click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
+@click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
+def funding_lend_automation(symbol, total_amount, min_order, max_rate_increment, rate_interval, target_period, no_confirm, api_key, api_secret):
+    """Automated funding lending strategy with market analysis and tiered orders"""
+    try:
+        if not api_key or not api_secret:
+            raise ValueError("API credentials required")
+
+        # Validate inputs
+        if total_amount <= 0:
+            raise ValueError("Total amount must be positive")
+        if min_order <= 0:
+            raise ValueError("Minimum order size must be positive")
+        if total_amount < min_order:
+            raise ValueError("Total amount must be at least minimum order size")
+
+        # Initialize automation system
+        automation = FundingLendingAutomation(api_key, api_secret, rate_interval)
+
+        # Run automation
+        confirm = not no_confirm
+        success = automation.run_automation(
+            symbol=symbol,
+            total_amount=total_amount,
+            min_order=min_order,
+            target_period=target_period,
+            confirm=confirm
+        )
+
+        if success:
+            print("Funding lending automation completed successfully!")
+        else:
+            print("Funding lending automation failed or was cancelled.")
+
+    except ValueError as e:
+        print(f"Error: {e}")
+        print("Please set BITFINEX_API_KEY and BITFINEX_API_SECRET environment variables or provide them as options.")
+    except Exception as e:
+        print(f"Unexpected error: {e}")
 
 
 if __name__ == '__main__':

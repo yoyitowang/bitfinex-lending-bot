@@ -17,7 +17,7 @@
 | `funding-market-analysis` | 綜合分析 | ❌ | `cli.py funding-market-analysis --symbol USD` |
 | `funding-portfolio` | 投資組合分析 | ✅ | `cli.py funding-portfolio` |
 | `auto-lending-check` | 自動借貸檢查 | ❌ | `cli.py auto-lending-check --symbol USD --period 2d` |
-| `funding-lend-automation` | 自動放貸策略 | ✅ | `funding_lend_automation.py --symbol USD --total-amount 1000 --min-order 150` |
+| `funding-lend-automation` | 自動放貸策略 | ✅ | `cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-order 150` |
 
 ## 🚀 主要功能
 
@@ -200,23 +200,23 @@ python cli.py auto-lending-check --symbol USD --period 2d --min-confidence 0.7
 
 #### 12. 自動化放貸策略
 ```bash
-python funding_lend_automation.py --symbol USD --total-amount 1000 --min-order 150 --rate-increment 0.0001 --max-rate-increment 0.001
+python cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-order 150 --rate-interval 0.00005
 ```
-**功能**: 自動分析市場數據，生成競爭性放貸策略，並可選擇自動提交多筆訂單
+**功能**: 自動分析市場數據，基於funding book最低掛單利率生成競爭性放貸策略，並可選擇自動提交多筆訂單
 **參數**:
 - `--symbol`: 貨幣符號 (預設: USD)
 - `--total-amount`: 總放貸金額 (預設: 1000)
 - `--min-order`: 最小訂單金額 (預設: 150)
-- `--rate-increment`: 訂單間利率增幅 (預設: 0.0001 = 0.01%)
-- `--max-rate-increment`: 最大利率增幅 (預設: 0.001 = 0.1%)
-- `--target-period`: 目標貸款期間 (預設: 30天)
+- `--rate-interval`: 訂單間利率間隔 (預設: 0.00005 = 0.005%)
+- `--max-rate-increment`: 最大利率增幅範圍 (預設: 0.0001 = 0.01%)
+- `--target-period`: 目標貸款期間 (預設: 2天)
 - `--no-confirm`: 跳過用戶確認 (慎用)
 - `--api-key`, `--api-secret`: API認證 (或使用環境變數)
 
 **工作流程**:
-1. **市場分析**: 從funding book和trades數據分析不同期間的利率統計
-2. **智能推薦**: 基於市場最高利率 + 小增幅生成推薦利率
-3. **策略生成**: 將總金額拆分成多筆訂單，利率逐步增加形成階梯狀掛單
+1. **市場分析**: 從funding book數據獲取最低掛單利率
+2. **智能推薦**: 使用funding book最低掛單利率作為基準
+3. **策略生成**: 從基準利率開始，每筆訂單增加固定間隔，形成避免立即成交的階梯狀掛單
 4. **用戶確認**: 顯示詳細策略，等待確認
 5. **自動執行**: 確認後順序提交所有訂單
 
@@ -290,38 +290,34 @@ if decision_2d["should_lend"]:
 
 #### 自動化放貸策略使用
 ```python
-from funding_lend_automation import FundingLendingAutomation
+# 注意：funding-lend-automation功能已整合到CLI命令中
+# 建議使用命令行界面：python cli.py funding-lend-automation [參數]
 
-# 初始化自動化系統
-automation = FundingLendingAutomation(api_key, api_secret)
+# 如果需要程式化使用，可以直接調用CLI模組
+import subprocess
+import os
 
-# 運行完整自動化流程
-success = automation.run_automation(
-    symbol="USD",
-    total_amount=1000,
-    min_order=150,
-    rate_increment=0.0001,
-    max_rate_increment=0.001,
-    target_period=30,
-    confirm=True  # 等待用戶確認
-)
+def run_lending_automation(symbol="USD", total_amount=1000, min_order=150, rate_interval=0.00005):
+    """程式化調用funding-lend-automation命令"""
+    cmd = [
+        "python", "cli.py", "funding-lend-automation",
+        "--symbol", symbol,
+        "--total-amount", str(total_amount),
+        "--min-order", str(min_order),
+        "--rate-interval", str(rate_interval),
+        "--api-key", os.getenv("BITFINEX_API_KEY", ""),
+        "--api-secret", os.getenv("BITFINEX_API_SECRET", "")
+    ]
 
-# 或分步執行
-# 1. 市場分析
-automation.display_market_analysis("USD")
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        return f"Error: {e.stderr}"
 
-# 2. 生成推薦
-recommendation = automation.generate_recommendation("USD", 30)
-automation.display_recommendation(recommendation)
-
-# 3. 生成訂單策略
-orders = automation.generate_order_strategy(
-    recommendation, 1000, 150, 0.0001, 0.001
-)
-automation.display_order_strategy(orders, "USD")
-
-# 4. 執行訂單 (需要用戶確認)
-automation.execute_lending_strategy(orders, "USD")
+# 使用示例
+result = run_lending_automation("USD", 1000, 150, 0.00005)
+print(result)
 ```
 
 ### 📁 **數據存儲**
