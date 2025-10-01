@@ -17,6 +17,7 @@
 | `funding-market-analysis` | 綜合分析 | ❌ | `cli.py funding-market-analysis --symbol USD` |
 | `funding-portfolio` | 投資組合分析 | ✅ | `cli.py funding-portfolio` |
 | `auto-lending-check` | 自動借貸檢查 | ❌ | `cli.py auto-lending-check --symbol USD --period 2d` |
+| `funding-lend-automation` | 自動放貸策略 | ✅ | `funding_lend_automation.py --symbol USD --total-amount 1000 --min-order 150` |
 
 ## 🚀 主要功能
 
@@ -35,6 +36,7 @@
 - **Strategy Recommendations**: 智能借貸策略建議
 - **Risk Assessment**: 風險評估和信心度評分
 - **Auto-lending**: 自動化借貸決策系統
+- **Automated Lending Strategy**: 智能多筆訂單策略生成和自動執行
 
 ### 數據管理
 - **Data Persistence**: 分析結果自動保存
@@ -196,6 +198,40 @@ python cli.py auto-lending-check --symbol USD --period 2d --min-confidence 0.7
 - `--period`: 借貸期間 (2d 或 30d)
 - `--min-confidence`: 最低信心度門檻 (0-1)
 
+#### 12. 自動化放貸策略
+```bash
+python funding_lend_automation.py --symbol USD --total-amount 1000 --min-order 150 --rate-increment 0.0001 --max-rate-increment 0.001
+```
+**功能**: 自動分析市場數據，生成競爭性放貸策略，並可選擇自動提交多筆訂單
+**參數**:
+- `--symbol`: 貨幣符號 (預設: USD)
+- `--total-amount`: 總放貸金額 (預設: 1000)
+- `--min-order`: 最小訂單金額 (預設: 150)
+- `--rate-increment`: 訂單間利率增幅 (預設: 0.0001 = 0.01%)
+- `--max-rate-increment`: 最大利率增幅 (預設: 0.001 = 0.1%)
+- `--target-period`: 目標貸款期間 (預設: 30天)
+- `--no-confirm`: 跳過用戶確認 (慎用)
+- `--api-key`, `--api-secret`: API認證 (或使用環境變數)
+
+**工作流程**:
+1. **市場分析**: 從funding book和trades數據分析不同期間的利率統計
+2. **智能推薦**: 基於市場最高利率 + 小增幅生成推薦利率
+3. **策略生成**: 將總金額拆分成多筆訂單，利率逐步增加形成階梯狀掛單
+4. **用戶確認**: 顯示詳細策略，等待確認
+5. **自動執行**: 確認後順序提交所有訂單
+
+**示例輸出**:
+```
+Market Analysis for fUSD
+┌─ 期間統計表，顯示平均/最高利率等 ┐
+
+Lending Recommendation for fUSD
+┌─ 推薦利率、市場對比、信心度 ┐
+
+Order Strategy for fUSD
+┌─ 多筆訂單策略，利率階梯分佈 ┐
+```
+
 ### 💻 **程式化使用**
 
 #### 基本API使用
@@ -251,6 +287,41 @@ if decision_2d["should_lend"]:
         decision_2d["recommended_amount"],
         2
     )
+
+#### 自動化放貸策略使用
+```python
+from funding_lend_automation import FundingLendingAutomation
+
+# 初始化自動化系統
+automation = FundingLendingAutomation(api_key, api_secret)
+
+# 運行完整自動化流程
+success = automation.run_automation(
+    symbol="USD",
+    total_amount=1000,
+    min_order=150,
+    rate_increment=0.0001,
+    max_rate_increment=0.001,
+    target_period=30,
+    confirm=True  # 等待用戶確認
+)
+
+# 或分步執行
+# 1. 市場分析
+automation.display_market_analysis("USD")
+
+# 2. 生成推薦
+recommendation = automation.generate_recommendation("USD", 30)
+automation.display_recommendation(recommendation)
+
+# 3. 生成訂單策略
+orders = automation.generate_order_strategy(
+    recommendation, 1000, 150, 0.0001, 0.001
+)
+automation.display_order_strategy(orders, "USD")
+
+# 4. 執行訂單 (需要用戶確認)
+automation.execute_lending_strategy(orders, "USD")
 ```
 
 ### 📁 **數據存儲**
