@@ -2,3 +2,4 @@ requests>=2.25.1
 click>=8.0.0
 python-dotenv>=0.19.0
 bitfinex-api-py>=1.1.8
+rich>=13.0.0
