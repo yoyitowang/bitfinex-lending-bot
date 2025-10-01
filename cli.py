@@ -29,8 +29,8 @@ def format_funding_book(data, symbol):
         from rich.panel import Panel
 
         table = Table(title=f"Funding Order Book for f{symbol}", show_header=True, header_style="bold magenta")
-        table.add_column("Rate", style="green", justify="right")
-        table.add_column("Rate %", style="yellow", justify="right")
+        table.add_column("Daily Rate", style="yellow", justify="right")
+        table.add_column("Yearly Rate", style="yellow", justify="right")
         table.add_column("Period", style="cyan", justify="center")
         table.add_column("Count", style="white", justify="right")
         table.add_column("Amount", style="red" if data[0][3] < 0 else "green", justify="right")
@@ -38,12 +38,12 @@ def format_funding_book(data, symbol):
 
         for entry in data[:20]:  # Show first 20 entries
             rate, period, count, amount = entry
-            rate_pct = f"{rate*100:.4f}%"
+            daily_rate_pct = f"{rate*100:.4f}%"
+            yearly_rate_pct = f"{rate*365*100:.2f}%"
             amount_type = "LEND" if amount < 0 else "BORROW"
-            amount_color = "red" if amount < 0 else "green"
             table.add_row(
-                f"{rate:.8f}",
-                rate_pct,
+                daily_rate_pct,
+                yearly_rate_pct,
                 f"{int(period)}d",
                 f"{int(count)}",
                 f"{abs(amount):,.2f}",
@@ -56,14 +56,14 @@ def format_funding_book(data, symbol):
         return capture.get()
     else:
         # Simple text format for Bash
-        output = f"Bitfinex Funding Order Book - f{symbol}\n{'='*60}\n"
-        output += f"{'Rate':<15} {'Rate%':<10} {'Period':<8} {'Count':<8} {'Amount':<15} {'Type':<8}\n"
-        output += f"{'='*60}\n"
+        output = f"Bitfinex Funding Order Book - f{symbol}\n{'='*80}\n"
+        output += f"{'Daily Rate':<12} {'Yearly Rate':<12} {'Period':<8} {'Count':<8} {'Amount':<15} {'Type':<8}\n"
+        output += f"{'='*80}\n"
 
         for i, entry in enumerate(data[:20]):
             rate, period, count, amount = entry
             amount_type = "LEND" if amount < 0 else "BORROW"
-            output += f"{rate:<15.8f} {rate*100:<10.4f}% {int(period):<8}d {int(count):<8} {abs(amount):<15,.2f} {amount_type:<8}\n"
+            output += f"{rate*100:<12.4f}% {rate*365*100:<12.2f}% {int(period):<8}d {int(count):<8} {abs(amount):<15,.2f} {amount_type:<8}\n"
 
         return output.strip()
 
@@ -80,13 +80,14 @@ def format_funding_trades(data, symbol):
         table.add_column("ID", style="white", justify="right")
         table.add_column("Timestamp", style="cyan")
         table.add_column("Amount", style="green", justify="right")
-        table.add_column("Rate", style="yellow", justify="right")
-        table.add_column("Rate %", style="yellow", justify="right")
+        table.add_column("Daily Rate", style="yellow", justify="right")
+        table.add_column("Yearly Rate", style="yellow", justify="right")
         table.add_column("Period", style="blue", justify="center")
 
         for trade in data[:20]:  # Show first 20 trades
             trade_id, timestamp, amount, rate, period = trade
-            rate_pct = f"{rate*100:.4f}%"
+            daily_rate_pct = f"{rate*100:.4f}%"
+            yearly_rate_pct = f"{rate*365*100:.2f}%"
             # Convert timestamp to readable format
             from datetime import datetime
             dt = datetime.fromtimestamp(timestamp / 1000)
@@ -96,8 +97,8 @@ def format_funding_trades(data, symbol):
                 str(trade_id),
                 time_str,
                 f"{amount:,.2f}",
-                f"{rate:.8f}",
-                rate_pct,
+                daily_rate_pct,
+                yearly_rate_pct,
                 f"{int(period)}d"
             )
 
@@ -107,16 +108,16 @@ def format_funding_trades(data, symbol):
         return capture.get()
     else:
         # Simple text format for Bash
-        output = f"Bitfinex Funding Trades - f{symbol}\n{'='*80}\n"
-        output += f"{'ID':<10} {'Timestamp':<20} {'Amount':<15} {'Rate':<12} {'Rate%':<10} {'Period':<8}\n"
-        output += f"{'='*80}\n"
+        output = f"Bitfinex Funding Trades - f{symbol}\n{'='*100}\n"
+        output += f"{'ID':<10} {'Timestamp':<20} {'Amount':<15} {'Daily Rate':<12} {'Yearly Rate':<12} {'Period':<8}\n"
+        output += f"{'='*100}\n"
 
         for trade in data[:20]:
             trade_id, timestamp, amount, rate, period = trade
             from datetime import datetime
             dt = datetime.fromtimestamp(timestamp / 1000)
             time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-            output += f"{trade_id:<10} {time_str:<20} {amount:<15,.2f} {rate:<12.8f} {rate*100:<10.4f}% {int(period):<8}d\n"
+            output += f"{trade_id:<10} {time_str:<20} {amount:<15,.2f} {rate*100:<12.4f}% {rate*365*100:<12.2f}% {int(period):<8}d\n"
 
         return output.strip()
 
@@ -713,22 +714,22 @@ def format_funding_ticker(data, symbol):
         # Use Rich table for Windows PowerShell
         table = Table(title=f"Funding Ticker for f{symbol}", show_header=True, header_style="bold magenta")
         table.add_column("Field", style="cyan", no_wrap=True)
-        table.add_column("Value", style="green")
-        table.add_column("Percentage", style="yellow", justify="right")
+        table.add_column("Daily Rate", style="yellow", justify="right")
+        table.add_column("Yearly Rate", style="yellow", justify="right")
 
-        # Add rows
-        table.add_row("FRR (Flash Return Rate)", f"{data[0]:.8f}", f"{data[0]*100:.4f}%")
-        table.add_row("Best Bid", f"{data[1]:.8f}", f"{data[1]*100:.4f}%")
+        # Add rows - only for rate fields
+        table.add_row("FRR (Flash Return Rate)", f"{data[0]*100:.4f}%", f"{data[0]*365*100:.2f}%")
+        table.add_row("Best Bid", f"{data[1]*100:.4f}%", f"{data[1]*365*100:.2f}%")
         table.add_row("Bid Period", f"{int(data[2])} days", "")
         table.add_row("Bid Size", f"{data[3]:,.2f}", "")
-        table.add_row("Best Ask", f"{data[4]:.8f}", f"{data[4]*100:.4f}%")
+        table.add_row("Best Ask", f"{data[4]*100:.4f}%", f"{data[4]*365*100:.2f}%")
         table.add_row("Ask Period", f"{int(data[5])} days", "")
         table.add_row("Ask Size", f"{data[6]:,.2f}", "")
-        table.add_row("Daily Change", f"{data[7]:.8f}", f"{data[8]:.4f}%")
-        table.add_row("Last Price", f"{data[9]:.8f}", f"{data[9]*100:.4f}%")
+        table.add_row("Daily Change", f"{data[8]:.4f}%", f"{data[8]*365:.2f}%")
+        table.add_row("Last Price", f"{data[9]*100:.4f}%", f"{data[9]*365*100:.2f}%")
         table.add_row("24h Volume", f"{data[10]:,.2f}", "")
-        table.add_row("24h High", f"{data[11]:.8f}", f"{data[11]*100:.4f}%")
-        table.add_row("24h Low", f"{data[12]:.8f}", f"{data[12]*100:.4f}%")
+        table.add_row("24h High", f"{data[11]*100:.4f}%", f"{data[11]*365*100:.2f}%")
+        table.add_row("24h Low", f"{data[12]*100:.4f}%", f"{data[12]*365*100:.2f}%")
         table.add_row("FRR Amount Available", f"{data[15]:,.2f}", "")
 
         # Create a panel with the table
@@ -742,21 +743,21 @@ def format_funding_ticker(data, symbol):
         # Use simple text format for Bash/Linux terminals
         formatted = f"""
 Bitfinex Funding Market Data - f{symbol}
-{'='*50}
-FRR (Flash Return Rate):     {data[0]:.8f} ({data[0]*100:.4f}%)
-Best Bid:                   {data[1]:.8f} ({data[1]*100:.4f}%)
+{'='*60}
+FRR (Flash Return Rate):     {data[0]*100:.4f}% (Yearly: {data[0]*365*100:.2f}%)
+Best Bid:                   {data[1]*100:.4f}% (Yearly: {data[1]*365*100:.2f}%)
 Bid Period:                {int(data[2])} days
 Bid Size:                  {data[3]:,.2f}
-Best Ask:                   {data[4]:.8f} ({data[4]*100:.4f}%)
+Best Ask:                   {data[4]*100:.4f}% (Yearly: {data[4]*365*100:.2f}%)
 Ask Period:                {int(data[5])} days
 Ask Size:                  {data[6]:,.2f}
-Daily Change:              {data[7]:.8f} ({data[8]:.4f}%)
-Last Price:                {data[9]:.8f} ({data[9]*100:.4f}%)
+Daily Change:              {data[8]:.4f}% (Yearly: {data[8]*365:.2f}%)
+Last Price:                {data[9]*100:.4f}% (Yearly: {data[9]*365*100:.2f}%)
 24h Volume:                {data[10]:,.2f}
-24h High:                  {data[11]:.8f} ({data[11]*100:.4f}%)
-24h Low:                   {data[12]:.8f} ({data[12]*100:.4f}%)
+24h High:                  {data[11]*100:.4f}% (Yearly: {data[11]*365*100:.2f}%)
+24h Low:                   {data[12]*100:.4f}% (Yearly: {data[12]*365*100:.2f}%)
 FRR Amount Available:      {data[15]:,.2f}
-{'='*50}
+{'='*60}
 """
         return formatted.strip()
 
