@@ -280,9 +280,15 @@ def format_funding_market_analysis(analysis: FundingMarketAnalysis) -> str:
         # 風險評估
         risk_text = Text()
         risk_text.append("Risk Assessment:\n", style="bold red")
-        for risk_type, level in risks.items():
+        risk_dict = {
+            "Volatility Risk": risks.volatility_risk,
+            "Liquidity Risk": risks.liquidity_risk,
+            "Rate Risk": risks.rate_risk,
+            "Overall Risk": risks.overall_risk
+        }
+        for risk_type, level in risk_dict.items():
             color = "red" if level == "high" else "yellow" if level == "medium" else "green"
-            risk_text.append(f"• {risk_type.replace('_', ' ').title()}: {level.title()}\n", style=color)
+            risk_text.append(f"• {risk_type}: {level.title()}\n", style=color)
 
         # 市場狀況
         condition_text = Text(f"Market Conditions: {conditions}", style="cyan")
@@ -345,8 +351,14 @@ def format_funding_market_analysis(analysis: FundingMarketAnalysis) -> str:
 
         # 風險評估
         output += "RISK ASSESSMENT:\n"
-        for risk_type, level in risks.items():
-            output += f"{risk_type.replace('_', ' ').title()}: {level.title()}\n"
+        risk_dict = {
+            "Volatility Risk": risks.volatility_risk,
+            "Liquidity Risk": risks.liquidity_risk,
+            "Rate Risk": risks.rate_risk,
+            "Overall Risk": risks.overall_risk
+        }
+        for risk_type, level in risk_dict.items():
+            output += f"{risk_type}: {level.title()}\n"
 
         output += f"\nMarket Conditions: {conditions}\n"
 
