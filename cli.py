@@ -1,9 +1,11 @@
 import click
 import os
 import platform
+from typing import Dict, Any
 from bitfinex_api import BitfinexAPI
 from authenticated_api import AuthenticatedBitfinexAPI
-from rich.console import Console
+from funding_market_analyzer import FundingMarketAnalyzer, FundingMarketAnalysis
+from rich.console import Console, Group
 from rich.table import Table
 from rich.panel import Panel
 
@@ -215,6 +217,152 @@ def format_funding_offers(data):
 
         return output.strip()
 
+def format_funding_market_analysis(analysis: FundingMarketAnalysis) -> str:
+    """Format funding market analysis results"""
+    if not analysis:
+        return "Error: No analysis data available"
+
+    stats = analysis.market_stats
+    strategies = analysis.strategies
+    risks = analysis.risk_assessment
+    conditions = analysis.market_conditions
+
+    if is_windows_terminal():
+        from rich.table import Table
+        from rich.panel import Panel
+        from rich.text import Text
+
+        # 市場統計表格
+        stats_table = Table(title=f"Funding Market Analysis - {stats.symbol}", show_header=True, header_style="bold magenta")
+        stats_table.add_column("Indicator", style="cyan", no_wrap=True)
+        stats_table.add_column("Value", style="green")
+        stats_table.add_column("Description", style="white")
+
+        stats_table.add_row("Average Rate (2-day)", f"{stats.avg_rate_2d:.8f}", f"{stats.avg_rate_2d*100:.4f}%")
+        stats_table.add_row("Average Rate (30-day)", f"{stats.avg_rate_30d:.8f}", f"{stats.avg_rate_30d*100:.4f}%")
+        stats_table.add_row("Overall Average Rate", f"{stats.avg_rate_all:.8f}", f"{stats.avg_rate_all*100:.4f}%")
+        stats_table.add_row("Rate Volatility", f"{stats.rate_volatility:.8f}", f"±{stats.rate_volatility*100:.4f}%")
+        stats_table.add_row("Bid-Ask Spread", f"{stats.bid_ask_spread:.8f}", f"{stats.bid_ask_spread*100:.4f}%")
+        stats_table.add_row("Market Depth Score", f"{stats.market_depth_score:.2f}", "Liquidity indicator")
+        stats_table.add_row("Trend Direction", stats.trend_direction.title(), "Market movement")
+
+        # 成交量分佈表格
+        volume_table = Table(title="Volume Distribution", show_header=True, header_style="bold blue")
+        volume_table.add_column("Period", style="cyan")
+        volume_table.add_column("Volume", style="green", justify="right")
+
+        total_volume = sum(stats.volume_distribution.values())
+        for period, volume in stats.volume_distribution.items():
+            percentage = (volume / total_volume * 100) if total_volume > 0 else 0
+            volume_table.add_row(f"{period}", f"{volume:,.2f} ({percentage:.1f}%)")
+
+        # 策略建議表格
+        strategy_table = Table(title="Strategy Recommendations", show_header=True, header_style="bold green")
+        strategy_table.add_column("Period", style="cyan")
+        strategy_table.add_column("Recommended Rate", style="yellow")
+        strategy_table.add_column("Amount Range", style="green")
+        strategy_table.add_column("Risk Level", style="red")
+        strategy_table.add_column("Yield Expectation", style="blue")
+
+        for period_key, strategy in strategies.items():
+            period_name = "2 Days" if period_key == "2_day" else "30 Days"
+            amount_range = f"${strategy.amount_range_min:,} - ${strategy.amount_range_max:,}"
+            risk_color = "red" if strategy.risk_level == "high" else "yellow" if strategy.risk_level == "medium" else "green"
+
+            strategy_table.add_row(
+                period_name,
+                f"{strategy.rate_pct:.4f}%",
+                amount_range,
+                strategy.risk_level.title(),
+                strategy.yield_expectation.title()
+            )
+
+        # 風險評估
+        risk_text = Text()
+        risk_text.append("Risk Assessment:\n", style="bold red")
+        for risk_type, level in risks.items():
+            color = "red" if level == "high" else "yellow" if level == "medium" else "green"
+            risk_text.append(f"• {risk_type.replace('_', ' ').title()}: {level.title()}\n", style=color)
+
+        # 市場狀況
+        condition_text = Text(f"Market Conditions: {conditions}", style="cyan")
+
+        # 異常記錄
+        if stats.anomalies:
+            anomaly_text = Text("Anomalies Detected:\n", style="bold yellow")
+            for anomaly in stats.anomalies[:5]:  # 最多顯示5個
+                if anomaly['type'] == 'large_trade':
+                    anomaly_text.append(f"• Large trade: ${anomaly['amount']:,.2f} at {anomaly['rate']*100:.4f}%\n", style="yellow")
+                elif anomaly['type'] == 'extreme_rate':
+                    anomaly_text.append(f"• Extreme rate: {anomaly['rate']*100:.4f}% ({anomaly['below_avg_pct']:.1f}% below average)\n", style="red")
+        else:
+            anomaly_text = Text("No significant anomalies detected", style="green")
+
+        # 順序顯示各個表格，避免layout問題
+        with console.capture() as capture:
+            console.print(Panel(stats_table, title="Market Statistics"))
+            console.print()
+            console.print(Panel(volume_table, title="Volume Distribution"))
+            console.print()
+            console.print(Panel(strategy_table, title="Strategy Recommendations"))
+            console.print()
+            console.print(Panel(Group(risk_text, condition_text, anomaly_text), title="Risk & Market Analysis"))
+        return capture.get()
+
+    else:
+        # 簡單文字格式 for Bash
+        output = f"Funding Market Analysis - {stats.symbol}\n"
+        output += "="*60 + "\n\n"
+
+        # 市場統計
+        output += "MARKET STATISTICS:\n"
+        output += f"Average Rate (2-day):  {stats.avg_rate_2d:.8f} ({stats.avg_rate_2d*100:.4f}%)\n"
+        output += f"Average Rate (30-day): {stats.avg_rate_30d:.8f} ({stats.avg_rate_30d*100:.4f}%)\n"
+        output += f"Overall Average:      {stats.avg_rate_all:.8f} ({stats.avg_rate_all*100:.4f}%)\n"
+        output += f"Rate Volatility:      {stats.rate_volatility:.8f}\n"
+        output += f"Bid-Ask Spread:      {stats.bid_ask_spread:.8f} ({stats.bid_ask_spread*100:.4f}%)\n"
+        output += f"Market Depth Score:  {stats.market_depth_score:.2f}\n"
+        output += f"Trend Direction:     {stats.trend_direction.title()}\n\n"
+
+        # 成交量分佈
+        output += "VOLUME DISTRIBUTION:\n"
+        total_volume = sum(stats.volume_distribution.values())
+        for period, volume in stats.volume_distribution.items():
+            percentage = (volume / total_volume * 100) if total_volume > 0 else 0
+            output += f"{period}: {volume:,.2f} ({percentage:.1f}%)\n"
+        output += "\n"
+
+        # 策略建議
+        output += "STRATEGY RECOMMENDATIONS:\n"
+        for period_key, strategy in strategies.items():
+            period_name = "2 Days" if period_key == "2_day" else "30 Days"
+            output += f"{period_name}:\n"
+            output += f"  Recommended Rate: {strategy.rate_pct:.4f}%\n"
+            output += f"  Amount Range: ${strategy.amount_range_min:,} - ${strategy.amount_range_max:,}\n"
+            output += f"  Risk Level: {strategy.risk_level.title()}\n"
+            output += f"  Yield Expectation: {strategy.yield_expectation.title()}\n"
+            output += f"  Rationale: {strategy.rationale}\n\n"
+
+        # 風險評估
+        output += "RISK ASSESSMENT:\n"
+        for risk_type, level in risks.items():
+            output += f"{risk_type.replace('_', ' ').title()}: {level.title()}\n"
+
+        output += f"\nMarket Conditions: {conditions}\n"
+
+        # 異常記錄
+        if stats.anomalies:
+            output += "\nANOMALIES DETECTED:\n"
+            for anomaly in stats.anomalies[:5]:
+                if anomaly['type'] == 'large_trade':
+                    output += f"• Large trade: ${anomaly['amount']:,.2f} at {anomaly['rate']*100:.4f}%\n"
+                elif anomaly['type'] == 'extreme_rate':
+                    output += f"• Extreme rate: {anomaly['rate']*100:.4f}% ({anomaly['below_avg_pct']:.1f}% below average)\n"
+        else:
+            output += "\nNo significant anomalies detected\n"
+
+        return output.strip()
+
 def format_funding_ticker(data, symbol):
     """Format funding ticker data - use Rich for Windows, simple text for Bash"""
     if not data or len(data) < 16:
@@ -371,6 +519,57 @@ def funding_offer(symbol, amount, rate, period, api_key, api_secret):
                 print(f"Failed to submit funding offer: {notification.text}")
         else:
             print("Failed to submit funding offer")
+    except ValueError as e:
+        print(f"Error: {e}")
+        print("Please set BITFINEX_API_KEY and BITFINEX_API_SECRET environment variables or provide them as options.")
+
+@cli.command()
+@click.option('--symbol', default='USD', help='Funding currency symbol (e.g., USD, BTC)')
+def funding_market_analysis(symbol):
+    """Comprehensive funding market analysis with statistics and strategy recommendations"""
+    analyzer = FundingMarketAnalyzer()
+    analysis_result = analyzer.get_strategy_recommendations(symbol)
+
+    if analysis_result:
+        formatted = format_funding_market_analysis(analysis_result)
+        print(formatted)
+    else:
+        print("Failed to perform market analysis")
+
+@cli.command()
+@click.option('--symbol', default='USD', help='Funding currency symbol')
+@click.option('--period', type=click.Choice(['2d', '30d']), default='2d', help='Lending period')
+@click.option('--min-confidence', type=float, default=0.7, help='Minimum confidence score (0-1)')
+@click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
+@click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
+def auto_lending_check(symbol, period, min_confidence, api_key, api_secret):
+    """Check if auto-lending conditions are met (programmatic access example)"""
+    try:
+        analyzer = FundingMarketAnalyzer()
+
+        if period == '2d':
+            result = analyzer.should_auto_lend_2day(symbol, min_confidence)
+        else:  # 30d
+            result = analyzer.should_auto_lend_30day(symbol, min_confidence)
+
+        print(f"Auto-lending check for {period} period on {symbol}:")
+        print(f"Should lend: {result['should_lend']}")
+        print(f"Reason: {result['reason']}")
+
+        if result['should_lend']:
+            print(f"Recommended rate: {result['recommended_rate']:.8f} ({result['recommended_rate']*100:.4f}%)")
+            print(f"Recommended amount: ${result['recommended_amount']:,.2f}")
+
+        print(f"Confidence score: {result.get('confidence_score', 'N/A')}")
+        print(f"Risk level: {result.get('risk_level', 'N/A')}")
+
+        if result['should_lend']:
+            print("\n✅ Conditions met for auto-lending!")
+            # 這裡可以實際執行借貸
+            # analyzer.execute_auto_lend(symbol, result['recommended_rate'], result['recommended_amount'], period)
+        else:
+            print("\n❌ Conditions not met for auto-lending")
+
     except ValueError as e:
         print(f"Error: {e}")
         print("Please set BITFINEX_API_KEY and BITFINEX_API_SECRET environment variables or provide them as options.")
