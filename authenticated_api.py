@@ -39,6 +39,24 @@ class AuthenticatedBitfinexAPI:
             print(f"Failed to retrieve funding offers: {e}")
             return None
 
+    def get_funding_credits(self, symbol: Optional[str] = None) -> Optional[List]:
+        """Get user's funding credits (borrowed funds)"""
+        try:
+            credits = self.client.rest.auth.get_funding_credits(symbol=symbol)
+            return credits
+        except Exception as e:
+            print(f"Failed to retrieve funding credits: {e}")
+            return None
+
+    def get_funding_loans(self, symbol: Optional[str] = None) -> Optional[List]:
+        """Get user's funding loans (lent out funds that are earning interest)"""
+        try:
+            loans = self.client.rest.auth.get_funding_loans(symbol=symbol)
+            return loans
+        except Exception as e:
+            print(f"Failed to retrieve funding loans: {e}")
+            return None
+
     def post_funding_offer(self, symbol: str, amount: float, rate: float, period: int) -> Optional[Notification]:
         """Submit a funding offer (lending)"""
         try:

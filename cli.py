@@ -165,17 +165,17 @@ def format_wallets(data):
 def format_funding_offers(data):
     """Format funding offers data"""
     if not data:
-        return "No active funding offers"
+        return "No pending lending offers found"
 
     if is_windows_terminal():
         from rich.table import Table
         from rich.panel import Panel
 
-        table = Table(title="Active Funding Offers", show_header=True, header_style="bold magenta")
+        table = Table(title="Pending Lending Offers", show_header=True, header_style="bold magenta")
         table.add_column("Symbol", style="cyan", no_wrap=True)
         table.add_column("Amount", style="green", justify="right")
-        table.add_column("Rate", style="yellow", justify="right")
-        table.add_column("Rate %", style="yellow", justify="right")
+        table.add_column("Daily Rate", style="yellow", justify="right")
+        table.add_column("Yearly Rate", style="yellow", justify="right")
         table.add_column("Period", style="blue", justify="center")
         table.add_column("Status", style="white")
 
@@ -187,24 +187,25 @@ def format_funding_offers(data):
             period = getattr(offer, 'period', 0)
             status = getattr(offer, 'status', 'Active')
 
+            yearly_rate = rate * 365
             table.add_row(
                 symbol,
                 f"{amount:,.2f}",
-                f"{rate:.8f}",
                 f"{rate*100:.4f}%",
+                f"{yearly_rate*100:.2f}%",
                 f"{period}d",
                 status
             )
 
-        panel = Panel(table, title="Bitfinex Active Funding Offers", border_style="blue")
+        panel = Panel(table, title="Bitfinex Pending Lending Offers", border_style="blue")
         with console.capture() as capture:
             console.print(panel)
         return capture.get()
     else:
         # Simple text format for Bash
-        output = "Bitfinex Active Funding Offers\n" + "="*60 + "\n"
-        output += f"{'Symbol':<8} {'Amount':<12} {'Rate':<12} {'Rate%':<8} {'Period':<8} {'Status':<10}\n"
-        output += "="*60 + "\n"
+        output = "Bitfinex Pending Lending Offers\n" + "="*80 + "\n"
+        output += f"{'Symbol':<8} {'Amount':<12} {'Daily Rate':<12} {'Yearly Rate':<12} {'Period':<8} {'Status':<10}\n"
+        output += "="*80 + "\n"
 
         for offer in data:
             symbol = getattr(offer, 'symbol', 'N/A')
@@ -212,8 +213,9 @@ def format_funding_offers(data):
             rate = getattr(offer, 'rate', 0)
             period = getattr(offer, 'period', 0)
             status = getattr(offer, 'status', 'Active')
+            yearly_rate = rate * 365
 
-            output += f"{symbol:<8} {amount:<12,.2f} {rate:<12.8f} {rate*100:<8.4f}% {period:<8}d {status:<10}\n"
+            output += f"{symbol:<8} {amount:<12,.2f} {rate*100:<12.4f}% {yearly_rate*100:<12.2f}% {period:<8}d {status:<10}\n"
 
         return output.strip()
 
@@ -375,6 +377,219 @@ def format_funding_market_analysis(analysis: FundingMarketAnalysis) -> str:
 
         return output.strip()
 
+def format_funding_portfolio(portfolio_data: Dict[str, Any]) -> str:
+    """Format funding portfolio statistics"""
+    if "error" in portfolio_data:
+        return f"Error: {portfolio_data['error']}"
+
+    summary = portfolio_data['summary']
+    wallet = portfolio_data.get('wallet_statistics', {})
+    pending_lending = portfolio_data['pending_lending_statistics']
+    active_lending = portfolio_data['active_lending_statistics']
+    borrowing = portfolio_data['borrowing_statistics']
+    income = portfolio_data['income_analysis']
+    risks = portfolio_data['risk_metrics']
+    periods = portfolio_data['period_distribution']
+
+    if is_windows_terminal():
+        from rich.table import Table
+        from rich.panel import Panel
+        from rich.text import Text
+
+        # 投資組合總覽表格
+        overview_table = Table(title="Portfolio Overview", show_header=True, header_style="bold magenta")
+        overview_table.add_column("Metric", style="cyan", no_wrap=True)
+        overview_table.add_column("Pending Lends", style="blue", justify="right")
+        overview_table.add_column("Active Lends", style="green", justify="right")
+        overview_table.add_column("Borrows", style="red", justify="right")
+        overview_table.add_column("Net", style="yellow", justify="right")
+
+        overview_table.add_row(
+            "Available for Lending",
+            "",
+            "",
+            "",
+            f"${summary.get('available_for_lending', 0):,.2f}"
+        )
+        overview_table.add_row(
+            "Total Amount",
+            f"${summary['total_pending_lending_amount']:,.2f}",
+            f"${summary['total_active_lending_amount']:,.2f}",
+            f"${summary['total_borrowing_amount']:,.2f}",
+            f"${summary['net_exposure']:,.2f}"
+        )
+        overview_table.add_row(
+            "Active Positions",
+            str(summary['pending_offers_count']),
+            str(summary['active_lends_count']),
+            str(summary['borrowing_credits_count']),
+            ""
+        )
+
+        # 日利率和年利率 (只顯示active lends的利率，因為收益只從已借出計算)
+        active_daily_rate = active_lending['weighted_avg_rate']
+        active_yearly_rate = active_daily_rate * 365
+        borrowing_daily_rate = borrowing['weighted_avg_rate']
+        borrowing_yearly_rate = borrowing_daily_rate * 365
+        net_daily_rate = active_daily_rate - borrowing_daily_rate
+        net_yearly_rate = net_daily_rate * 365
+
+        overview_table.add_row(
+            "Avg Daily Rate",
+            "",
+            f"{active_daily_rate*100:.4f}%",
+            f"{borrowing_daily_rate*100:.4f}%",
+            f"{net_daily_rate*100:.4f}%"
+        )
+        overview_table.add_row(
+            "Avg Yearly Rate",
+            "",
+            f"{active_yearly_rate*100:.2f}%",
+            f"{borrowing_yearly_rate*100:.2f}%",
+            f"{net_yearly_rate*100:.2f}%"
+        )
+
+        # 收益分析表格
+        income_table = Table(title="Income Analysis", show_header=True, header_style="bold green")
+        income_table.add_column("Period", style="cyan")
+        income_table.add_column("Income", style="green", justify="right")
+        income_table.add_column("Cost", style="red", justify="right")
+        income_table.add_column("Net", style="yellow", justify="right")
+
+        income_table.add_row("Daily", f"${income['estimated_daily_income']:.2f}", f"${income['estimated_daily_cost']:.2f}", f"${income['net_daily_income']:.2f}")
+        income_table.add_row("Yearly", f"${income['estimated_yearly_income']:.2f}", f"${income['estimated_yearly_cost']:.2f}", f"${income['net_yearly_income']:.2f}")
+        income_table.add_row("Margin", f"{(income['estimated_yearly_income']/summary['total_lending_amount']*100):.2f}%" if summary['total_lending_amount'] > 0 else "0%", "", f"{income['net_income_margin']:.2f}%")
+
+        # 期間分佈表格
+        period_table = Table(title="Period Distribution", show_header=True, header_style="bold blue")
+        period_table.add_column("Period", style="cyan")
+        period_table.add_column("Pending Lends", style="blue", justify="right")
+        period_table.add_column("Active Lends", style="green", justify="right")
+        period_table.add_column("Borrows", style="red", justify="right")
+
+        all_periods = set(periods['pending_periods'].keys()) | set(periods['active_periods'].keys()) | set(periods['borrowing_periods'].keys())
+        for period in sorted(all_periods):
+            pending_count = periods['pending_periods'].get(period, 0)
+            active_count = periods['active_periods'].get(period, 0)
+            borrowing_count = periods['borrowing_periods'].get(period, 0)
+            period_table.add_row(period, str(pending_count), str(active_count), str(borrowing_count))
+
+        # 風險指標
+        risk_text = Text()
+        risk_text.append("Risk Metrics:\n", style="bold red")
+        risk_text.append(f"• Leverage Ratio: {risks['leverage_ratio']:.2f}\n", style="yellow")
+        risk_text.append(f"• Rate Spread: {risks['rate_spread']*100:.4f}%\n", style="green")
+        risk_text.append(f"• Concentration Risk: {risks['concentration_risk']:.2f}\n", style="red")
+        risk_text.append(f"• Duration Risk: {risks['duration_risk']:.2f}\n", style="blue")
+        risk_text.append(f"• Liquidity Ratio: {risks['liquidity_ratio']:.2f}\n", style="cyan")
+
+        # 貨幣分佈 (使用active lending，因為這才是實際收益來源)
+        if active_lending['symbol_distribution']:
+            currency_text = Text("Currency Distribution (Active Lending):\n", style="bold magenta")
+            total_lending = sum(active_lending['symbol_distribution'].values())
+            for symbol, amount in active_lending['symbol_distribution'].items():
+                percentage = (amount / total_lending * 100) if total_lending > 0 else 0
+                currency_text.append(f"• {symbol}: ${amount:,.2f} ({percentage:.1f}%)\n", style="green")
+
+            with console.capture() as capture:
+                console.print(Panel(overview_table, title="Portfolio Overview"))
+                console.print()
+                console.print(Panel(income_table, title="Income Analysis"))
+                console.print()
+                console.print(Panel(period_table, title="Period Distribution"))
+                console.print()
+                console.print(Panel(Group(risk_text, currency_text), title="Risk & Distribution Analysis"))
+        else:
+            with console.capture() as capture:
+                console.print(Panel(overview_table, title="Portfolio Overview"))
+                console.print()
+                console.print(Panel(income_table, title="Income Analysis"))
+                console.print()
+                console.print(Panel(period_table, title="Period Distribution"))
+                console.print()
+                console.print(Panel(risk_text, title="Risk Analysis"))
+
+        return capture.get()
+
+    else:
+        # 簡單文字格式 for Bash
+        output = "Funding Portfolio Analysis\n" + "="*60 + "\n\n"
+
+        # 總覽
+        output += "PORTFOLIO OVERVIEW:\n"
+        output += f"Available for Lending:     ${summary.get('available_for_lending', 0):,.2f}\n"
+        output += f"Pending Lending Amount:   ${summary['total_pending_lending_amount']:,.2f}\n"
+        output += f"Active Lending Amount:    ${summary['total_active_lending_amount']:,.2f}\n"
+        output += f"Total Lending Amount:     ${summary['total_lending_amount']:,.2f}\n"
+        output += f"Total Borrowing Amount:   ${summary['total_borrowing_amount']:,.2f}\n"
+        output += f"Net Exposure:            ${summary['net_exposure']:,.2f}\n"
+        output += f"Pending Offers:          {summary['pending_offers_count']}\n"
+        output += f"Active Lends:            {summary['active_lends_count']}\n"
+        output += f"Borrowing Credits:       {summary['borrowing_credits_count']}\n"
+
+        # 日利率和年利率 (只顯示active lends的利率，因為收益只從已借出計算)
+        active_daily_rate = active_lending['weighted_avg_rate']
+        active_yearly_rate = active_daily_rate * 365
+        borrowing_daily_rate = borrowing['weighted_avg_rate']
+        borrowing_yearly_rate = borrowing_daily_rate * 365
+        net_daily_rate = active_daily_rate - borrowing_daily_rate
+        net_yearly_rate = net_daily_rate * 365
+
+        output += f"Avg Daily Rate (A/B/N): {active_daily_rate*100:.4f}% / {borrowing_daily_rate*100:.4f}% / {net_daily_rate*100:.4f}%\n"
+        output += f"Avg Yearly Rate (A/B/N): {active_yearly_rate*100:.2f}% / {borrowing_yearly_rate*100:.2f}% / {net_yearly_rate*100:.2f}%\n\n"
+
+        # 收益分析
+        output += "INCOME ANALYSIS:\n"
+        output += f"Daily Income:           ${income['estimated_daily_income']:.2f}\n"
+        output += f"Daily Cost:             ${income['estimated_daily_cost']:.2f}\n"
+        output += f"Net Daily Income:       ${income['net_daily_income']:.2f}\n"
+        output += f"Yearly Income:          ${income['estimated_yearly_income']:.2f}\n"
+        output += f"Yearly Cost:            ${income['estimated_yearly_cost']:.2f}\n"
+        output += f"Net Yearly Income:      ${income['net_yearly_income']:.2f}\n"
+        output += f"Net Income Margin:      {income['net_income_margin']:.2f}%\n\n"
+
+        # 掛單放貸統計
+        output += "PENDING LENDING STATISTICS:\n"
+        output += f"Total Amount:           ${pending_lending['total_amount']:,.2f}\n"
+        output += f"Average Rate:           {pending_lending['avg_rate']*100:.4f}%\n"
+        output += f"Weighted Avg Rate:      {pending_lending['weighted_avg_rate']*100:.4f}%\n"
+        output += f"Rate Range:             {pending_lending['rate_range']['min']*100:.4f}% - {pending_lending['rate_range']['max']*100:.4f}%\n\n"
+
+        # 已借出資金統計
+        output += "ACTIVE LENDING STATISTICS:\n"
+        output += f"Total Amount:           ${active_lending['total_amount']:,.2f}\n"
+        output += f"Average Rate:           {active_lending['avg_rate']*100:.4f}%\n"
+        output += f"Weighted Avg Rate:      {active_lending['weighted_avg_rate']*100:.4f}%\n"
+        output += f"Rate Range:             {active_lending['rate_range']['min']*100:.4f}% - {active_lending['rate_range']['max']*100:.4f}%\n\n"
+
+        # 借款統計
+        output += "BORROWING STATISTICS:\n"
+        output += f"Total Amount:           ${borrowing['total_amount']:,.2f}\n"
+        output += f"Average Rate:           {borrowing['avg_rate']*100:.4f}%\n"
+        output += f"Weighted Avg Rate:      {borrowing['weighted_avg_rate']*100:.4f}%\n\n"
+
+        # 風險指標
+        output += "RISK METRICS:\n"
+        output += f"Leverage Ratio:        {risks['leverage_ratio']:.2f}\n"
+        output += f"Rate Spread:           {risks['rate_spread']*100:.4f}%\n"
+        output += f"Concentration Risk:    {risks['concentration_risk']:.2f}\n"
+        output += f"Duration Risk:         {risks['duration_risk']:.2f}\n"
+        output += f"Liquidity Ratio:       {risks['liquidity_ratio']:.2f}\n\n"
+
+        # 期間分佈
+        output += "PERIOD DISTRIBUTION:\n"
+        output += "Pending Lends:\n"
+        for period, count in periods['pending_periods'].items():
+            output += f"  {period}: {count} positions\n"
+        output += "Active Lends:\n"
+        for period, count in periods['active_periods'].items():
+            output += f"  {period}: {count} positions\n"
+        output += "Borrowing:\n"
+        for period, count in periods['borrowing_periods'].items():
+            output += f"  {period}: {count} positions\n"
+
+        return output.strip()
+
 def format_funding_ticker(data, symbol):
     """Format funding ticker data - use Rich for Windows, simple text for Bash"""
     if not data or len(data) < 16:
@@ -499,7 +714,7 @@ def wallets(api_key, api_secret):
 @click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
 @click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
 def funding_offers(symbol, api_key, api_secret):
-    """Get user's active funding offers"""
+    """Get user's pending lending offers (not yet lent out)"""
     try:
         api = AuthenticatedBitfinexAPI(api_key, api_secret)
         offers = api.get_funding_offers(symbol)
@@ -508,6 +723,42 @@ def funding_offers(symbol, api_key, api_secret):
             print(formatted)
         else:
             print("No active funding offers found")
+    except ValueError as e:
+        print(f"Error: {e}")
+        print("Please set BITFINEX_API_KEY and BITFINEX_API_SECRET environment variables or provide them as options.")
+
+@cli.command()
+@click.option('--symbol', help='Funding symbol (e.g., fUSD) - optional, gets all if not specified')
+@click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
+@click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
+def funding_credits(symbol, api_key, api_secret):
+    """Get user's active funding credits (borrowings)"""
+    try:
+        api = AuthenticatedBitfinexAPI(api_key, api_secret)
+        credits = api.get_funding_credits(symbol)
+        if credits:
+            formatted = format_funding_offers(credits)  # Reuse the same format as offers
+            print(formatted)
+        else:
+            print("No active funding credits found")
+    except ValueError as e:
+        print(f"Error: {e}")
+        print("Please set BITFINEX_API_KEY and BITFINEX_API_SECRET environment variables or provide them as options.")
+
+@cli.command()
+@click.option('--symbol', help='Funding symbol (e.g., fUSD) - optional, gets all if not specified')
+@click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
+@click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
+def funding_active_lends(symbol, api_key, api_secret):
+    """Get user's active lent positions (already lent out funds that are earning interest)"""
+    try:
+        api = AuthenticatedBitfinexAPI(api_key, api_secret)
+        loans = api.get_funding_loans(symbol)
+        if loans:
+            formatted = format_funding_offers(loans)  # Reuse the same format as offers
+            print(formatted)
+        else:
+            print("No active lent positions found")
     except ValueError as e:
         print(f"Error: {e}")
         print("Please set BITFINEX_API_KEY and BITFINEX_API_SECRET environment variables or provide them as options.")
@@ -547,6 +798,22 @@ def funding_market_analysis(symbol):
         print(formatted)
     else:
         print("Failed to perform market analysis")
+
+@cli.command()
+@click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
+@click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
+def funding_portfolio(api_key, api_secret):
+    """Analyze user's lending portfolio with comprehensive statistics"""
+    analyzer = FundingMarketAnalyzer()
+    portfolio_data = analyzer.analyze_lending_portfolio(api_key, api_secret)
+
+    if portfolio_data and "error" not in portfolio_data:
+        formatted = format_funding_portfolio(portfolio_data)
+        print(formatted)
+    else:
+        error_msg = portfolio_data.get("error", "Unknown error") if portfolio_data else "Failed to analyze portfolio"
+        print(f"Error: {error_msg}")
+        print("Please ensure your API credentials are set correctly.")
 
 @cli.command()
 @click.option('--symbol', default='USD', help='Funding currency symbol')

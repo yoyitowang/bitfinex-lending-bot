@@ -481,6 +481,482 @@ class FundingMarketAnalyzer:
 
         return max(0.1, min(1.0, confidence))
 
+    def analyze_lending_portfolio(self, api_key: str = None, api_secret: str = None) -> Optional[Dict[str, Any]]:
+        """分析用戶的貸款投資組合（funding offers和funding credits）"""
+        try:
+            if not api_key or not api_secret:
+                api_key = os.getenv('BITFINEX_API_KEY')
+                api_secret = os.getenv('BITFINEX_API_SECRET')
+
+            if not api_key or not api_secret:
+                return {"error": "API credentials required"}
+
+            auth_api = AuthenticatedBitfinexAPI(api_key, api_secret)
+
+            # 獲取錢包餘額
+            wallets = auth_api.get_wallets()
+
+            # 獲取funding offers (掛單中的放貸訂單)
+            offers = auth_api.get_funding_offers()
+
+            # 獲取funding loans (已借出的資金，正在賺取利息)
+            loans = auth_api.get_funding_loans()
+
+            # 獲取funding credits (借款協議)
+            credits = auth_api.get_funding_credits()
+
+            return self._calculate_portfolio_statistics(wallets or [], offers or [], loans or [], credits or [])
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _calculate_portfolio_statistics(self, wallets, offers, loans, credits) -> Dict[str, Any]:
+        """計算貸款投資組合統計"""
+
+        # 確保是列表格式
+        if offers and not isinstance(offers, list):
+            offers = [offers] if offers else []
+        if loans and not isinstance(loans, list):
+            loans = [loans] if loans else []
+        if credits and not isinstance(credits, list):
+            credits = [credits] if credits else []
+
+        # 分析錢包餘額
+        wallet_stats = self._analyze_wallet_balance(wallets or [])
+
+        # 分析掛單中的放貸訂單 (pending lends)
+        pending_lends_stats = self._analyze_pending_lends(offers or [])
+
+        # 分析已借出的資金 (active lends from funding loans API)
+        active_lends_stats = self._analyze_active_lends(loans)
+
+        # 分析借款統計 (borrows from funding credits)
+        borrowing_stats = self._analyze_funding_credits(credits or [])
+
+        # 綜合統計
+        total_pending_lending_amount = pending_lends_stats['total_amount']
+        total_active_lending_amount = active_lends_stats['total_amount']
+        total_borrowing_amount = borrowing_stats['total_amount']
+        total_lending_amount = total_pending_lending_amount + total_active_lending_amount
+
+        net_exposure = total_lending_amount - total_borrowing_amount
+
+        # 收益計算 (只從已借出的資金計算)
+        estimated_daily_income = active_lends_stats['weighted_avg_rate'] * total_active_lending_amount
+        estimated_yearly_income = estimated_daily_income * 365
+
+        # 成本計算
+        estimated_daily_cost = borrowing_stats['weighted_avg_rate'] * total_borrowing_amount
+        estimated_yearly_cost = estimated_daily_cost * 365
+
+        net_daily_income = estimated_daily_income - estimated_daily_cost
+        net_yearly_income = net_daily_income * 365
+
+        # 計算可用資金 (尚未借出的錢包餘額)
+        available_for_lending = wallet_stats['available_for_lending']
+
+        return {
+            "summary": {
+                "total_lending_amount": total_lending_amount,
+                "total_pending_lending_amount": total_pending_lending_amount,
+                "total_active_lending_amount": total_active_lending_amount,
+                "total_borrowing_amount": total_borrowing_amount,
+                "net_exposure": net_exposure,
+                "available_for_lending": available_for_lending,
+                "pending_offers_count": len(offers),
+                "active_lends_count": len(loans),
+                "borrowing_credits_count": len(credits)
+            },
+            "wallet_statistics": wallet_stats,
+            "pending_lending_statistics": pending_lends_stats,
+            "active_lending_statistics": active_lends_stats,
+            "borrowing_statistics": borrowing_stats,
+            "income_analysis": {
+                "estimated_daily_income": estimated_daily_income,
+                "estimated_yearly_income": estimated_yearly_income,
+                "estimated_daily_cost": estimated_daily_cost,
+                "estimated_yearly_cost": estimated_yearly_cost,
+                "net_daily_income": net_daily_income,
+                "net_yearly_income": net_yearly_income,
+                "net_income_margin": (net_yearly_income / total_active_lending_amount * 100) if total_active_lending_amount > 0 else 0
+            },
+            "risk_metrics": self._calculate_portfolio_risks(active_lends_stats, borrowing_stats),
+            "period_distribution": self._analyze_period_distribution(offers, loans, credits),
+            "timestamp": datetime.now().isoformat()
+        }
+
+
+    def _analyze_pending_lends(self, offers) -> Dict[str, Any]:
+        """分析掛單中的放貸訂單統計 (不需要年收益統計)"""
+        if not offers:
+            return {
+                "total_amount": 0,
+                "avg_rate": 0,
+                "weighted_avg_rate": 0,
+                "rate_range": {"min": 0, "max": 0},
+                "period_distribution": {},
+                "symbol_distribution": {},
+                "offers_count": 0
+            }
+
+        # 確保offers是可迭代的
+        if not hasattr(offers, '__iter__') or isinstance(offers, (str, bytes)):
+            offers = [offers]
+
+        total_amount = 0
+        total_weighted_rate = 0
+        rates = []
+        periods = {}
+        symbols = {}
+
+        for offer in offers:
+            # 根據bfxapi的FundingOffer物件格式解析數據
+            if hasattr(offer, 'amount'):
+                amount = offer.amount
+                rate = offer.rate
+                period = offer.period
+                symbol = getattr(offer, 'symbol', 'UNKNOWN')
+            else:
+                # 如果是列表格式
+                amount = offer[2] if len(offer) > 2 else 0
+                rate = offer[3] if len(offer) > 3 else 0
+                period = offer[4] if len(offer) > 4 else 0
+                symbol = offer[1] if len(offer) > 1 else 'UNKNOWN'
+
+            # 確保amount是正數（掛單中的放貸訂單）
+            amount = abs(amount)
+
+            total_amount += amount
+            total_weighted_rate += rate * amount
+            rates.append(rate)
+
+            # 期間分佈
+            period_key = f"{period}d"
+            periods[period_key] = periods.get(period_key, 0) + amount
+
+            # 貨幣分佈
+            symbols[symbol] = symbols.get(symbol, 0) + amount
+
+        weighted_avg_rate = total_weighted_rate / total_amount if total_amount > 0 else 0
+
+        return {
+            "total_amount": total_amount,
+            "avg_rate": sum(rates) / len(rates) if rates else 0,
+            "weighted_avg_rate": weighted_avg_rate,
+            "rate_range": {"min": min(rates) if rates else 0, "max": max(rates) if rates else 0},
+            "period_distribution": periods,
+            "symbol_distribution": symbols,
+            "offers_count": len(list(offers))  # 使用list()確保可以計算長度
+        }
+
+    def _analyze_active_lends(self, active_lends) -> Dict[str, Any]:
+        """分析已借出的資金統計 (用於收益計算)"""
+        if not active_lends:
+            return {
+                "total_amount": 0,
+                "avg_rate": 0,
+                "weighted_avg_rate": 0,
+                "rate_range": {"min": 0, "max": 0},
+                "period_distribution": {},
+                "symbol_distribution": {},
+                "lends_count": 0
+            }
+
+        # 確保active_lends是可迭代的
+        if not hasattr(active_lends, '__iter__') or isinstance(active_lends, (str, bytes)):
+            active_lends = [active_lends]
+
+        total_amount = 0
+        total_weighted_rate = 0
+        rates = []
+        periods = {}
+        symbols = {}
+
+        for lend in active_lends:
+            # 解析lend數據 (funding credit格式)
+            if hasattr(lend, 'amount'):
+                amount = lend.amount
+                rate = lend.rate
+                period = lend.period
+                symbol = getattr(lend, 'symbol', 'UNKNOWN')
+            else:
+                # 如果是列表格式
+                amount = lend[2] if len(lend) > 2 else 0
+                rate = lend[3] if len(lend) > 3 else 0
+                period = lend[4] if len(lend) > 4 else 0
+                symbol = lend[1] if len(lend) > 1 else 'UNKNOWN'
+
+            # 確保amount是正數（已借出）
+            amount = abs(amount)
+
+            total_amount += amount
+            total_weighted_rate += rate * amount
+            rates.append(rate)
+
+            # 期間分佈
+            period_key = f"{period}d"
+            periods[period_key] = periods.get(period_key, 0) + amount
+
+            # 貨幣分佈
+            symbols[symbol] = symbols.get(symbol, 0) + amount
+
+        weighted_avg_rate = total_weighted_rate / total_amount if total_amount > 0 else 0
+
+        return {
+            "total_amount": total_amount,
+            "avg_rate": sum(rates) / len(rates) if rates else 0,
+            "weighted_avg_rate": weighted_avg_rate,
+            "rate_range": {"min": min(rates) if rates else 0, "max": max(rates) if rates else 0},
+            "period_distribution": periods,
+            "symbol_distribution": symbols,
+            "lends_count": len(list(active_lends))  # 使用list()確保可以計算長度
+        }
+
+    def _analyze_wallet_balance(self, wallets) -> Dict[str, Any]:
+        """分析錢包餘額統計"""
+        if not wallets:
+            return {
+                "total_balance": 0,
+                "available_for_lending": 0,
+                "funding_balance": 0,
+                "currency_breakdown": {},
+                "wallets_count": 0
+            }
+
+        total_balance = 0
+        available_for_lending = 0
+        funding_balance = 0
+        currency_breakdown = {}
+
+        for wallet in wallets:
+            # 解析wallet數據
+            if hasattr(wallet, 'balance'):
+                balance = wallet.balance
+                available = wallet.available_balance
+                currency = wallet.currency
+                wallet_type = wallet.wallet_type
+            else:
+                # 如果是列表格式
+                balance = wallet[2] if len(wallet) > 2 else 0
+                available = wallet[3] if len(wallet) > 3 else 0
+                currency = wallet[1] if len(wallet) > 1 else 'UNKNOWN'
+                wallet_type = 'funding'  # 預設為funding錢包
+
+            # 只計算funding錢包（用於借貸）
+            if wallet_type == 'funding':
+                total_balance += balance
+                available_for_lending += available
+                funding_balance += balance
+
+                # 貨幣分佈
+                if currency not in currency_breakdown:
+                    currency_breakdown[currency] = {
+                        "balance": 0,
+                        "available": 0
+                    }
+                currency_breakdown[currency]["balance"] += balance
+                currency_breakdown[currency]["available"] += available
+
+        return {
+            "total_balance": total_balance,
+            "available_for_lending": available_for_lending,
+            "funding_balance": funding_balance,
+            "currency_breakdown": currency_breakdown,
+            "wallets_count": len(wallets)
+        }
+
+    def _analyze_funding_offers(self, offers) -> Dict[str, Any]:
+        """分析funding offers統計"""
+        if not offers:
+            return {
+                "total_amount": 0,
+                "avg_rate": 0,
+                "weighted_avg_rate": 0,
+                "rate_range": {"min": 0, "max": 0},
+                "period_distribution": {},
+                "symbol_distribution": {},
+                "offers_count": 0
+            }
+
+        # 確保offers是可迭代的
+        if not hasattr(offers, '__iter__') or isinstance(offers, (str, bytes)):
+            offers = [offers]
+
+        total_amount = 0
+        total_weighted_rate = 0
+        rates = []
+        periods = {}
+        symbols = {}
+
+        for offer in offers:
+            # 根據bfxapi的FundingOffer物件格式解析數據
+            if hasattr(offer, 'amount'):
+                amount = offer.amount
+                rate = offer.rate
+                period = offer.period
+                symbol = getattr(offer, 'symbol', 'UNKNOWN')
+            else:
+                # 如果是列表格式
+                amount = offer[2] if len(offer) > 2 else 0
+                rate = offer[3] if len(offer) > 3 else 0
+                period = offer[4] if len(offer) > 4 else 0
+                symbol = offer[1] if len(offer) > 1 else 'UNKNOWN'
+
+            total_amount += amount
+            total_weighted_rate += rate * amount
+            rates.append(rate)
+
+            # 期間分佈
+            period_key = f"{period}d"
+            periods[period_key] = periods.get(period_key, 0) + amount
+
+            # 貨幣分佈
+            symbols[symbol] = symbols.get(symbol, 0) + amount
+
+        weighted_avg_rate = total_weighted_rate / total_amount if total_amount > 0 else 0
+
+        return {
+            "total_amount": total_amount,
+            "avg_rate": sum(rates) / len(rates) if rates else 0,
+            "weighted_avg_rate": weighted_avg_rate,
+            "rate_range": {"min": min(rates) if rates else 0, "max": max(rates) if rates else 0},
+            "period_distribution": periods,
+            "symbol_distribution": symbols,
+            "offers_count": len(list(offers))  # 使用list()確保可以計算長度
+        }
+
+    def _analyze_funding_credits(self, credits) -> Dict[str, Any]:
+        """分析funding credits統計"""
+        if not credits:
+            return {
+                "total_amount": 0,
+                "avg_rate": 0,
+                "weighted_avg_rate": 0,
+                "rate_range": {"min": 0, "max": 0},
+                "period_distribution": {},
+                "symbol_distribution": {},
+                "credits_count": 0
+            }
+
+        # 確保credits是可迭代的
+        if not hasattr(credits, '__iter__') or isinstance(credits, (str, bytes)):
+            credits = [credits]
+
+        total_amount = 0
+        total_weighted_rate = 0
+        rates = []
+        periods = {}
+        symbols = {}
+
+        for credit in credits:
+            # 解析credit數據
+            if hasattr(credit, 'amount'):
+                amount = credit.amount
+                rate = credit.rate
+                period = credit.period
+                symbol = getattr(credit, 'symbol', 'UNKNOWN')
+            else:
+                # 如果是列表格式
+                amount = credit[2] if len(credit) > 2 else 0
+                rate = credit[3] if len(credit) > 3 else 0
+                period = credit[4] if len(credit) > 4 else 0
+                symbol = credit[1] if len(credit) > 1 else 'UNKNOWN'
+
+            total_amount += amount
+            total_weighted_rate += rate * amount
+            rates.append(rate)
+
+            # 期間分佈
+            period_key = f"{period}d"
+            periods[period_key] = periods.get(period_key, 0) + amount
+
+            # 貨幣分佈
+            symbols[symbol] = symbols.get(symbol, 0) + amount
+
+        weighted_avg_rate = total_weighted_rate / total_amount if total_amount > 0 else 0
+
+        return {
+            "total_amount": total_amount,
+            "avg_rate": sum(rates) / len(rates) if rates else 0,
+            "weighted_avg_rate": weighted_avg_rate,
+            "rate_range": {"min": min(rates) if rates else 0, "max": max(rates) if rates else 0},
+            "period_distribution": periods,
+            "symbol_distribution": symbols,
+            "credits_count": len(list(credits))  # 使用list()確保可以計算長度
+        }
+
+    def _calculate_portfolio_risks(self, offers_stats: Dict, credits_stats: Dict) -> Dict[str, Any]:
+        """計算投資組合風險指標"""
+        lending_amount = offers_stats['total_amount']
+        borrowing_amount = credits_stats['total_amount']
+
+        # 槓桿比率
+        leverage_ratio = borrowing_amount / lending_amount if lending_amount > 0 else 0
+
+        # 利率風險 (借貸利率差異)
+        rate_spread = offers_stats['weighted_avg_rate'] - credits_stats['weighted_avg_rate']
+
+        # 集中風險 (前三大貨幣佔比)
+        concentration_risk = 0
+        if offers_stats['symbol_distribution']:
+            sorted_symbols = sorted(offers_stats['symbol_distribution'].items(), key=lambda x: x[1], reverse=True)
+            top_3 = sum(amount for _, amount in sorted_symbols[:3])
+            concentration_risk = top_3 / lending_amount if lending_amount > 0 else 0
+
+        # 期間風險 (長短期配比)
+        short_term = sum(amount for period, amount in offers_stats['period_distribution'].items() if '2d' in period or '7d' in period)
+        long_term = lending_amount - short_term
+        duration_risk = long_term / lending_amount if lending_amount > 0 else 0
+
+        return {
+            "leverage_ratio": leverage_ratio,
+            "rate_spread": rate_spread,
+            "concentration_risk": concentration_risk,
+            "duration_risk": duration_risk,
+            "liquidity_ratio": lending_amount / (lending_amount + borrowing_amount) if (lending_amount + borrowing_amount) > 0 else 0
+        }
+
+    def _analyze_period_distribution(self, offers, loans, credits) -> Dict[str, Any]:
+        """分析期間分佈"""
+        pending_periods = {}
+        active_periods = {}
+        borrowing_periods = {}
+
+        # 確保是可迭代的
+        offers = offers or []
+        loans = loans or []
+        credits = credits or []
+        if not hasattr(offers, '__iter__') or isinstance(offers, (str, bytes)):
+            offers = [offers] if offers else []
+        if not hasattr(loans, '__iter__') or isinstance(loans, (str, bytes)):
+            loans = [loans] if loans else []
+        if not hasattr(credits, '__iter__') or isinstance(credits, (str, bytes)):
+            credits = [credits] if credits else []
+
+        # 統計pending offers期間
+        for offer in offers:
+            period = getattr(offer, 'period', 0)
+            period_key = f"{period}d"
+            pending_periods[period_key] = pending_periods.get(period_key, 0) + 1
+
+        # 統計active loans期間
+        for loan in loans:
+            period = getattr(loan, 'period', 0)
+            period_key = f"{period}d"
+            active_periods[period_key] = active_periods.get(period_key, 0) + 1
+
+        # 統計borrowing credits期間
+        for credit in credits:
+            period = getattr(credit, 'period', 0)
+            period_key = f"{period}d"
+            borrowing_periods[period_key] = borrowing_periods.get(period_key, 0) + 1
+
+        return {
+            "pending_periods": pending_periods,
+            "active_periods": active_periods,
+            "borrowing_periods": borrowing_periods
+        }
+
     def get_analysis_for_auto_lending(self, symbol: str = "USD") -> Optional[Dict[str, Any]]:
         """獲取自動借貸所需的分析數據（程式化訪問）"""
         analysis = self.get_strategy_recommendations(symbol)

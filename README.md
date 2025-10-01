@@ -10,9 +10,12 @@
 | `funding-book` | 訂單簿數據 | ❌ | `cli.py funding-book --symbol USD` |
 | `funding-trades` | 交易歷史 | ❌ | `cli.py funding-trades --symbol USD --limit 50` |
 | `wallets` | 錢包餘額 | ✅ | `cli.py wallets` |
-| `funding-offers` | 活躍訂單 | ✅ | `cli.py funding-offers` |
+| `funding-offers` | 掛單放貸 | ✅ | `cli.py funding-offers` |
+| `funding-active-lends` | 已借出資金 | ✅ | `cli.py funding-active-lends` |
+| `funding-credits` | 活躍借款 | ✅ | `cli.py funding-credits` |
 | `funding-offer` | 提交借貸單 | ✅ | `cli.py funding-offer --symbol fUSD --amount 100 --rate 0.00015 --period 30` |
 | `funding-market-analysis` | 綜合分析 | ❌ | `cli.py funding-market-analysis --symbol USD` |
+| `funding-portfolio` | 投資組合分析 | ✅ | `cli.py funding-portfolio` |
 | `auto-lending-check` | 自動借貸檢查 | ❌ | `cli.py auto-lending-check --symbol USD --period 2d` |
 
 ## 🚀 主要功能
@@ -121,16 +124,46 @@ python cli.py wallets
 **功能**: 顯示所有錢包的餘額和可用資金
 **需求**: API金鑰設定
 
-#### 5. 查看活躍的Funding訂單
+#### 5. 查看掛單中的Funding放貸
 ```bash
 python cli.py funding-offers --symbol fUSD
 ```
-**功能**: 顯示用戶當前活躍的funding借貸訂單
+**功能**: 顯示用戶當前掛單中的funding放貸訂單（日利率/年利率），這些訂單尚未被借出
 **參數**:
 - `--symbol`: 可選，指定貨幣符號
 **需求**: API金鑰設定
 
-#### 6. 提交Funding借貸訂單
+#### 6. 查看已借出的Funding資金
+```bash
+python cli.py funding-active-lends --symbol fUSD
+```
+**功能**: 顯示用戶已借出並正在賺取利息的資金（日利率/年利率）
+**參數**:
+- `--symbol`: 可選，指定貨幣符號
+**需求**: API金鑰設定
+
+#### 7. 查看活躍的Funding貸款
+```bash
+python cli.py funding-credits --symbol fUSD
+```
+**功能**: 顯示用戶當前活躍的funding貸款記錄
+**參數**:
+- `--symbol`: 可選，指定貨幣符號
+**需求**: API金鑰設定
+
+#### 8. 查看投資組合分析
+```bash
+python cli.py funding-portfolio
+```
+**功能**: 顯示完整的funding投資組合統計分析，區分掛單放貸和已借出資金
+**輸出**:
+- 投資組合總覽 (可用資金、掛單放貸、已借出資金、借款、日利率/年利率)
+- 收益分析 (只從已借出資金計算每日/年收益和利潤率)
+- 期間分佈 (不同貸款期間的統計)
+- 風險分析 (槓桿比率、利率差、集中度風險等)
+**需求**: API金鑰設定
+
+#### 9. 提交Funding借貸訂單
 ```bash
 python cli.py funding-offer --symbol fUSD --amount 100 --rate 0.00015 --period 30
 ```
@@ -144,7 +177,7 @@ python cli.py funding-offer --symbol fUSD --amount 100 --rate 0.00015 --period 3
 
 ### 🤖 **進階分析命令**
 
-#### 7. 綜合市場分析
+#### 10. 綜合市場分析
 ```bash
 python cli.py funding-market-analysis --symbol USD
 ```
@@ -153,7 +186,7 @@ python cli.py funding-market-analysis --symbol USD
 - `--symbol`: 貨幣符號 (預設: USD)
 **輸出**: 詳細的市場分析報告和借貸策略建議
 
-#### 8. 自動借貸條件檢查
+#### 11. 自動借貸條件檢查
 ```bash
 python cli.py auto-lending-check --symbol USD --period 2d --min-confidence 0.7
 ```
@@ -184,6 +217,7 @@ from authenticated_api import AuthenticatedBitfinexAPI
 auth_api = AuthenticatedBitfinexAPI()
 wallets = auth_api.get_wallets()
 offers = auth_api.get_funding_offers()
+credits = auth_api.get_funding_credits()
 auth_api.post_funding_offer("fUSD", 100, 0.00015, 30)
 ```
 
@@ -195,6 +229,14 @@ analyzer = FundingMarketAnalyzer()
 
 # 獲取分析結果
 analysis = analyzer.get_strategy_recommendations("USD")
+
+# 分析funding投資組合
+portfolio_stats = analyzer.analyze_lending_portfolio(api_key, api_secret)
+
+# 包含錢包餘額、放貸/借款統計、收益分析、風險指標等完整資訊
+# portfolio_stats['summary']['available_for_lending'] - 可用的借貸資金
+# portfolio_stats['summary']['total_lending_amount'] - 總放貸金額
+# portfolio_stats['income_analysis']['net_yearly_income'] - 年淨收益
 
 # 程式化訪問
 auto_data = analyzer.get_analysis_for_auto_lending("USD")
