@@ -29,3 +29,27 @@ class AuthenticatedBitfinexAPI:
         except Exception as e:
             print(f"Failed to retrieve wallets: {e}")
             return None
+
+    def get_funding_offers(self, symbol: Optional[str] = None) -> Optional[List]:
+        """Get user's active funding offers"""
+        try:
+            offers = self.client.rest.auth.get_funding_offers(symbol=symbol)
+            return offers
+        except Exception as e:
+            print(f"Failed to retrieve funding offers: {e}")
+            return None
+
+    def post_funding_offer(self, symbol: str, amount: float, rate: float, period: int) -> Optional[Notification]:
+        """Submit a funding offer (lending)"""
+        try:
+            notification = self.client.rest.auth.submit_funding_offer(
+                type="LIMIT",
+                symbol=symbol,
+                amount=amount,
+                rate=rate,
+                period=period
+            )
+            return notification
+        except Exception as e:
+            print(f"Failed to submit funding offer: {e}")
+            return None

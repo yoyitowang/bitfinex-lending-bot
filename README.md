@@ -13,6 +13,8 @@ This project provides a modular Python implementation to interact with Bitfinex'
   - Funding Trades History
 - Support for authenticated account endpoints:
   - Wallets
+  - Submit Funding Offers (Lending)
+  - Get Active Funding Offers
 
 ## Installation
 
@@ -55,6 +57,12 @@ python cli.py funding-trades --symbol USD --limit 50
 
 # Get account wallets (requires API credentials)
 python cli.py wallets
+
+# Get user's active funding offers (requires API credentials)
+python cli.py funding-offers
+
+# Submit a funding offer (lending) (requires API credentials)
+python cli.py funding-offer --symbol fUSD --amount 100 --rate 0.0001 --period 30
 
 ```
 

@@ -63,6 +63,48 @@ def wallets(api_key, api_secret):
         print(f"Error: {e}")
         print("Please set BITFINEX_API_KEY and BITFINEX_API_SECRET environment variables or provide them as options.")
 
+@cli.command()
+@click.option('--symbol', help='Funding symbol (e.g., fUSD) - optional, gets all if not specified')
+@click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
+@click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
+def funding_offers(symbol, api_key, api_secret):
+    """Get user's active funding offers"""
+    try:
+        api = AuthenticatedBitfinexAPI(api_key, api_secret)
+        offers = api.get_funding_offers(symbol)
+        if offers:
+            print("Active Funding Offers:")
+            for offer in offers:
+                print(f"  {offer}")
+        else:
+            print("No active funding offers found")
+    except ValueError as e:
+        print(f"Error: {e}")
+        print("Please set BITFINEX_API_KEY and BITFINEX_API_SECRET environment variables or provide them as options.")
+
+@cli.command()
+@click.option('--symbol', required=True, help='Funding symbol (e.g., fUSD)')
+@click.option('--amount', required=True, type=float, help='Amount to lend')
+@click.option('--rate', required=True, type=float, help='Daily interest rate (e.g., 0.0001 for 0.01%)')
+@click.option('--period', required=True, type=int, help='Loan period in days')
+@click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
+@click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
+def funding_offer(symbol, amount, rate, period, api_key, api_secret):
+    """Submit a funding offer (lending order)"""
+    try:
+        api = AuthenticatedBitfinexAPI(api_key, api_secret)
+        notification = api.post_funding_offer(symbol, amount, rate, period)
+        if notification:
+            if notification.status == "SUCCESS":
+                print(f"Successfully submitted funding offer: {notification.data}")
+            else:
+                print(f"Failed to submit funding offer: {notification.text}")
+        else:
+            print("Failed to submit funding offer")
+    except ValueError as e:
+        print(f"Error: {e}")
+        print("Please set BITFINEX_API_KEY and BITFINEX_API_SECRET environment variables or provide them as options.")
+
 
 if __name__ == '__main__':
     cli()
