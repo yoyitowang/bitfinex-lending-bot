@@ -219,6 +219,120 @@ def format_funding_offers(data):
 
         return output.strip()
 
+def format_funding_loans(data):
+    """Format funding loans data (active lent positions)"""
+    if not data:
+        return "No active lent positions found"
+
+    if is_windows_terminal():
+        from rich.table import Table
+        from rich.panel import Panel
+
+        table = Table(title="Active Lending Positions", show_header=True, header_style="bold magenta")
+        table.add_column("Symbol", style="cyan", no_wrap=True)
+        table.add_column("Amount", style="green", justify="right")
+        table.add_column("Daily Rate", style="yellow", justify="right")
+        table.add_column("Yearly Rate", style="yellow", justify="right")
+        table.add_column("Period", style="blue", justify="center")
+        table.add_column("Status", style="white")
+
+        for loan in data:
+            # Assuming loan object has these attributes
+            symbol = getattr(loan, 'symbol', 'N/A')
+            amount = getattr(loan, 'amount', 0)
+            rate = getattr(loan, 'rate', 0)
+            period = getattr(loan, 'period', 0)
+            status = getattr(loan, 'status', 'Active')
+
+            yearly_rate = rate * 365
+            table.add_row(
+                symbol,
+                f"{amount:,.2f}",
+                f"{rate*100:.4f}%",
+                f"{yearly_rate*100:.2f}%",
+                f"{period}d",
+                status
+            )
+
+        panel = Panel(table, title="Bitfinex Active Lending Positions", border_style="blue")
+        with console.capture() as capture:
+            console.print(panel)
+        return capture.get()
+    else:
+        # Simple text format for Bash
+        output = "Bitfinex Active Lending Positions\n" + "="*80 + "\n"
+        output += f"{'Symbol':<8} {'Amount':<12} {'Daily Rate':<12} {'Yearly Rate':<12} {'Period':<8} {'Status':<10}\n"
+        output += "="*80 + "\n"
+
+        for loan in data:
+            symbol = getattr(loan, 'symbol', 'N/A')
+            amount = getattr(loan, 'amount', 0)
+            rate = getattr(loan, 'rate', 0)
+            period = getattr(loan, 'period', 0)
+            status = getattr(loan, 'status', 'Active')
+            yearly_rate = rate * 365
+
+            output += f"{symbol:<8} {amount:<12,.2f} {rate*100:<12.4f}% {yearly_rate*100:<12.2f}% {period:<8}d {status:<10}\n"
+
+        return output.strip()
+
+def format_funding_credits(data):
+    """Format funding credits data (borrowings)"""
+    if not data:
+        return "No active funding credits found"
+
+    if is_windows_terminal():
+        from rich.table import Table
+        from rich.panel import Panel
+
+        table = Table(title="Active Funding Credits", show_header=True, header_style="bold magenta")
+        table.add_column("Symbol", style="cyan", no_wrap=True)
+        table.add_column("Amount", style="red", justify="right")
+        table.add_column("Daily Rate", style="yellow", justify="right")
+        table.add_column("Yearly Rate", style="yellow", justify="right")
+        table.add_column("Period", style="blue", justify="center")
+        table.add_column("Status", style="white")
+
+        for credit in data:
+            # Assuming credit object has these attributes
+            symbol = getattr(credit, 'symbol', 'N/A')
+            amount = abs(getattr(credit, 'amount', 0))  # Show positive for display
+            rate = getattr(credit, 'rate', 0)
+            period = getattr(credit, 'period', 0)
+            status = getattr(credit, 'status', 'Active')
+
+            yearly_rate = rate * 365
+            table.add_row(
+                symbol,
+                f"{amount:,.2f}",
+                f"{rate*100:.4f}%",
+                f"{yearly_rate*100:.2f}%",
+                f"{period}d",
+                status
+            )
+
+        panel = Panel(table, title="Bitfinex Active Funding Credits", border_style="blue")
+        with console.capture() as capture:
+            console.print(panel)
+        return capture.get()
+    else:
+        # Simple text format for Bash
+        output = "Bitfinex Active Funding Credits\n" + "="*80 + "\n"
+        output += f"{'Symbol':<8} {'Amount':<12} {'Daily Rate':<12} {'Yearly Rate':<12} {'Period':<8} {'Status':<10}\n"
+        output += "="*80 + "\n"
+
+        for credit in data:
+            symbol = getattr(credit, 'symbol', 'N/A')
+            amount = abs(getattr(credit, 'amount', 0))  # Show positive for display
+            rate = getattr(credit, 'rate', 0)
+            period = getattr(credit, 'period', 0)
+            status = getattr(credit, 'status', 'Active')
+            yearly_rate = rate * 365
+
+            output += f"{symbol:<8} {amount:<12,.2f} {rate*100:<12.4f}% {yearly_rate*100:<12.2f}% {period:<8}d {status:<10}\n"
+
+        return output.strip()
+
 def format_funding_market_analysis(analysis: FundingMarketAnalysis) -> str:
     """Format funding market analysis results"""
     if not analysis:
@@ -737,7 +851,7 @@ def funding_credits(symbol, api_key, api_secret):
         api = AuthenticatedBitfinexAPI(api_key, api_secret)
         credits = api.get_funding_credits(symbol)
         if credits:
-            formatted = format_funding_offers(credits)  # Reuse the same format as offers
+            formatted = format_funding_credits(credits)
             print(formatted)
         else:
             print("No active funding credits found")
@@ -755,7 +869,7 @@ def funding_active_lends(symbol, api_key, api_secret):
         api = AuthenticatedBitfinexAPI(api_key, api_secret)
         loans = api.get_funding_loans(symbol)
         if loans:
-            formatted = format_funding_offers(loans)  # Reuse the same format as offers
+            formatted = format_funding_loans(loans)
             print(formatted)
         else:
             print("No active lent positions found")
