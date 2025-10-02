@@ -2043,7 +2043,7 @@ class FundingLendingAutomation:
 
 @cli.command()
 @click.option('--symbol', default='USD', help='Funding currency symbol')
-@click.option('--total-amount', type=float, default=1000.0, help='Total amount to lend')
+@click.option('--total-amount', type=float, default=1000.0, help='Total amount to lend (0 = use all available balance)')
 @click.option('--min-order', type=float, default=150.0, help='Minimum order size')
 @click.option('--max-orders', type=int, default=50, help='Maximum number of orders to place (default 50)')
 @click.option('--max-rate-increment', type=float, default=0.0001, help='Maximum rate increment from base in decimal (0.0001 = 0.01%)')
@@ -2071,6 +2071,20 @@ def funding_lend_automation(symbol, total_amount, min_order, max_orders, max_rat
 
         # Initialize automation system
         automation = FundingLendingAutomation(api_key, api_secret, rate_interval)
+
+        # If total_amount is 0, use all available balance
+        if total_amount == 0:
+            print(f"Total amount set to 0, retrieving available balance for {symbol}...")
+            available_balance = automation._get_funding_wallet_balance(symbol)
+            if available_balance is not None and available_balance > 0:
+                total_amount = available_balance
+                print(f"Using all available balance: ${total_amount:,.2f}")
+            else:
+                raise ValueError(f"Unable to retrieve balance for {symbol} or balance is zero")
+
+        # Validate final total_amount
+        if total_amount <= 0:
+            raise ValueError("Total amount must be positive")
 
         # Run automation
         confirm = not no_confirm
