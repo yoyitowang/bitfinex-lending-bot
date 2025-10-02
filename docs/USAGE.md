@@ -269,6 +269,14 @@ python cli.py funding-lend-automation \
   --sequential \
   --no-confirm
 
+# Allow small orders (bypass configured minimum, but enforce Bitfinex minimum of 150)
+python cli.py funding-lend-automation \
+  --symbol USD \
+  --total-amount 200 \
+  --min-order 500 \
+  --allow-small-orders \
+  --no-confirm
+
 # Parameters:
 # --symbol: Currency to lend
 # --total-amount: Total amount to lend
@@ -279,14 +287,59 @@ python cli.py funding-lend-automation \
 # --cancel-existing: Cancel existing offers first
 # --parallel/--sequential: Processing mode (default: sequential)
 # --max-workers: Parallel workers (if using parallel)
+# --allow-small-orders: Allow orders smaller than minimum order size (minimum still 150)
 # --no-confirm: Skip confirmation (required for automation)
 ```
+
+#### Allow Small Orders Feature
+
+The `--allow-small-orders` parameter provides flexibility in order sizing:
+
+```bash
+# Example: Allow orders from 150-499 when MIN_ORDER=500
+python cli.py funding-lend-automation \
+  --symbol USD \
+  --total-amount 200 \
+  --min-order 500 \
+  --allow-small-orders \
+  --no-confirm
+
+# Result: Places one order of $200 (allowed because >= 150)
+# Without --allow-small-orders: Would be rejected (200 < 500)
+```
+
+**Behavior:**
+- **Without flag**: Orders must be ≥ `min-order` (default: 150)
+- **With flag**: Orders can be ≥ 150 but smaller than `min-order`
+- **Always enforced**: Bitfinex platform minimum of 150 units
+```
+
+### Use All Available Balance Feature
+
+The `--total-amount 0` option automatically uses all available funds for lending:
+
+```bash
+# Use all available USD balance
+python cli.py funding-lend-automation --symbol USD --total-amount 0 --cancel-existing --no-confirm
+```
+
+**Balance Calculation Logic**:
+- **Wallet Balance Only**: `$600.00 (From wallet balance only)`
+- **With Pending Offers**: `$1,200.00 (Includes $600.00 wallet balance + $600.00 from pending offers)`
+- **Pending Offers Only**: `$500.00 (Includes $500.00 from pending offers that will be cancelled)`
+
+**Edge Cases Handled**:
+- ✅ Wallet balance = 0, pending offers exist → Uses pending offer amounts
+- ✅ Wallet balance > 0, no pending offers → Uses wallet balance only
+- ✅ Both wallet and pending offers → Uses combined effective balance
+- ✅ No funds available → Shows clear error message
 
 ### Automated Execution Flow
 
 1. **Balance Assessment**: Checks wallet balance and pending offers
    - Calculates effective balance when cancellation is enabled
    - Considers pending offers as available funds if they will be cancelled
+   - **Special Case**: When wallet balance is 0 but pending offers exist with `--cancel-existing`
 2. **Market Analysis**: Analyzes current funding book data
 3. **Rate Strategy**: Finds optimal rates based on market lowest offers
 4. **Order Generation**: Creates ladder of orders with incremental rates
@@ -377,8 +430,8 @@ On Unix systems, outputs clean text format suitable for:
 
 ### API Rate Limits
 
-- Sequential processing: 30 requests/minute
-- Parallel processing: 20 requests/minute
+- Sequential processing: 60 requests/minute (250ms intervals)
+- Parallel processing: 60 requests/minute (500ms intervals)
 - Built-in delays prevent rate limit violations
 
 ### Error Handling

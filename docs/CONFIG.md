@@ -67,8 +67,30 @@ AUTO_LENDING_PARALLEL=false
 # Maximum parallel workers (only if parallel=true)
 AUTO_LENDING_MAX_WORKERS=3
 
+# Allow orders smaller than minimum order size (always enforces 150 minimum)
+AUTO_LENDING_ALLOW_SMALL_ORDERS=false
+
 # Skip user confirmation (required for automation)
 AUTO_LENDING_NO_CONFIRM=true
+```
+
+### Small Orders Feature
+
+The `AUTO_LENDING_ALLOW_SMALL_ORDERS` setting allows flexibility in order sizing:
+
+```bash
+# Allow orders smaller than configured minimum (but >= 150)
+AUTO_LENDING_ALLOW_SMALL_ORDERS=true
+
+# Example: With MIN_ORDER=500 and ALLOW_SMALL_ORDERS=true
+# System can place orders from 150 to 499 units
+# Useful when exact balance amounts are below configured minimums
+```
+
+**Behavior:**
+- **When `false`**: Orders must be ≥ `AUTO_LENDING_MIN_ORDER` (default: 150)
+- **When `true`**: Orders can be ≥ 150 but smaller than `AUTO_LENDING_MIN_ORDER`
+- **Always enforced**: Bitfinex platform minimum of 150 units
 
 # Execution interval in seconds (600 = 10 minutes)
 AUTO_LENDING_INTERVAL=600
@@ -163,6 +185,7 @@ AUTO_LENDING_INTERVAL=1800
 | `AUTO_LENDING_CANCEL_EXISTING` | `true` | Cancel existing offers first |
 | `AUTO_LENDING_PARALLEL` | `false` | Use parallel processing |
 | `AUTO_LENDING_MAX_WORKERS` | `3` | Max parallel workers |
+| `AUTO_LENDING_ALLOW_SMALL_ORDERS` | `false` | Allow orders smaller than min size |
 | `AUTO_LENDING_NO_CONFIRM` | `true` | Skip confirmation prompts |
 | `AUTO_LENDING_INTERVAL` | `600` | Execution interval in seconds |
 
@@ -294,6 +317,7 @@ AUTO_LENDING_TARGET_PERIOD=2
 AUTO_LENDING_CANCEL_EXISTING=true
 AUTO_LENDING_PARALLEL=false
 AUTO_LENDING_MAX_WORKERS=3
+AUTO_LENDING_ALLOW_SMALL_ORDERS=false
 AUTO_LENDING_NO_CONFIRM=true
 AUTO_LENDING_INTERVAL=600
 

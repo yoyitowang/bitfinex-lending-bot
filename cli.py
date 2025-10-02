@@ -1507,7 +1507,8 @@ class FundingLendingAutomation:
 
     def generate_order_strategy(self, recommendation: LendingRecommendation,
                                 total_amount: float, min_order: float,
-                                max_orders: int = 50, target_period: int = 2) -> List[LendingOrder]:
+                                max_orders: int = 50, target_period: int = 2,
+                                allow_small_orders: bool = False) -> List[LendingOrder]:
         """
         Generate lending orders strategy based on market lowest offer rate
 
@@ -1523,36 +1524,74 @@ class FundingLendingAutomation:
             min_order: Minimum order size
             max_orders: Maximum number of orders
             target_period: Target lending period in days
+            allow_small_orders: Allow orders smaller than min_order (but still >= 150)
 
         Returns:
             List of LendingOrder objects
         """
-        if total_amount < min_order:
+        # Check minimum order size - can be bypassed with allow_small_orders flag
+        effective_min_order = min_order if not allow_small_orders else 150.0  # Bitfinex minimum
+        if total_amount < effective_min_order:
             return []  # Cannot create even one order
-
-        # Calculate maximum number of full orders
-        num_full_orders = int(total_amount // min_order)
-        num_orders = min(num_full_orders, max_orders)  # Respect max_orders limit
-
-        if num_orders == 0:
-            return []
-
-        # Calculate remaining amount after creating full orders
-        used_amount = num_orders * min_order
-        remaining_amount = total_amount - used_amount
 
         # Strategy parameters
         base_rate = recommendation.recommended_daily_rate
 
+        # Calculate order amounts based on strategy
+        if allow_small_orders:
+            # When allowing small orders, we can create multiple orders even if some are smaller than min_order
+            # But we still prefer to create as many full-size orders as possible
+
+            # Calculate how many full orders we can create
+            num_full_orders = int(total_amount // min_order)
+            remaining_after_full = total_amount - (num_full_orders * min_order)
+
+            # If remaining amount is enough for another order (>= 150), create it
+            if remaining_after_full >= 150.0:
+                num_orders = num_full_orders + 1
+                order_amounts = [min_order] * num_full_orders + [remaining_after_full]
+            elif num_full_orders > 0:
+                # Merge remaining to last full order
+                num_orders = num_full_orders
+                order_amounts = [min_order] * (num_full_orders - 1) + [min_order + remaining_after_full]
+            else:
+                # Only one small order
+                num_orders = 1
+                order_amounts = [total_amount]
+
+            # Respect max_orders limit
+            if num_orders > max_orders:
+                num_orders = max_orders
+                # Recalculate amounts proportionally
+                total_for_orders = sum(order_amounts[:max_orders])
+                remaining = total_amount - total_for_orders
+                if remaining > 0:
+                    # Add remaining to last order
+                    order_amounts = order_amounts[:max_orders]
+                    order_amounts[-1] += remaining
+                else:
+                    order_amounts = order_amounts[:max_orders]
+        else:
+            # Standard logic: only full-size orders
+            num_full_orders = int(total_amount // min_order)
+            num_orders = min(num_full_orders, max_orders)
+
+            if num_orders == 0:
+                return []
+
+            # Calculate remaining amount after creating full orders
+            used_amount = num_orders * min_order
+            remaining_amount = total_amount - used_amount
+
+            # Create order amounts
+            order_amounts = [min_order] * num_orders
+            if remaining_amount > 0:
+                order_amounts[-1] += remaining_amount  # Add remainder to last order
+
         orders = []
-        for i in range(num_orders):
+        for i, order_amount in enumerate(order_amounts):
             # Calculate rate for this order (start from base rate, increment by interval)
             current_rate = base_rate + (i * self.rate_interval)
-
-            # For the last order, add remaining amount
-            order_amount = min_order
-            if i == num_orders - 1 and remaining_amount > 0:
-                order_amount += remaining_amount
 
             order = LendingOrder(
                 amount=order_amount,
@@ -1907,9 +1946,9 @@ class FundingLendingAutomation:
 
         # Create rate limiter (optimized for better throughput)
         if parallel:
-            rate_limiter = RateLimiter(max_calls_per_minute=20, min_interval_ms=500)  # Parallel: 20 calls/min, 500ms interval
+            rate_limiter = RateLimiter(max_calls_per_minute=60, min_interval_ms=500)  # Parallel: 60 calls/min, 500ms interval
         else:
-            rate_limiter = RateLimiter(max_calls_per_minute=30, min_interval_ms=200)  # Sequential: 30 calls/min, 200ms interval
+            rate_limiter = RateLimiter(max_calls_per_minute=60, min_interval_ms=250)  # Sequential: 60 calls/min, 250ms interval
 
         if parallel and len(orders) > 1:
             # Parallel execution with separate API instances for each worker
@@ -1985,22 +2024,39 @@ class FundingLendingAutomation:
     def _get_pending_offers_total(self, symbol: str) -> Optional[float]:
         """Get total amount locked in pending funding offers for the symbol"""
         try:
+            # Try to get offers specifically for the symbol first
             offers = self.auth_api.get_funding_offers(symbol)
             if offers:
                 total_pending = 0.0
                 for offer in offers:
-                    # Assuming offer has amount attribute, or we need to access it properly
-                    amount = getattr(offer, 'amount', 0)
-                    total_pending += float(amount)
+                    # Filter by symbol if needed (in case API returns all offers)
+                    offer_symbol = getattr(offer, 'symbol', '')
+                    # Handle different symbol formats (UST, fUST, etc.)
+                    if offer_symbol.upper().replace('F', '') == symbol.upper():
+                        amount = getattr(offer, 'amount', 0)
+                        total_pending += float(amount)
                 return total_pending
+
+            # If no offers found for specific symbol, try getting all offers and filtering
+            all_offers = self.auth_api.get_funding_offers(None)
+            if all_offers:
+                total_pending = 0.0
+                for offer in all_offers:
+                    offer_symbol = getattr(offer, 'symbol', '')
+                    # Handle different symbol formats (UST, fUST, etc.)
+                    if offer_symbol.upper().replace('F', '') == symbol.upper():
+                        amount = getattr(offer, 'amount', 0)
+                        total_pending += float(amount)
+                return total_pending
+
             return 0.0  # No pending offers
         except Exception as e:
             self.console.print(f"[yellow]Warning: Could not retrieve pending offers: {str(e)}[/yellow]")
             return None
 
     def run_automation(self, symbol: str, total_amount: float, min_order: float,
-                      max_orders: int = 50, target_period: int = 30, confirm: bool = True,
-                      cancel_existing: bool = False) -> bool:
+                       max_orders: int = 50, target_period: int = 30, confirm: bool = True,
+                       cancel_existing: bool = False, allow_small_orders: bool = False) -> bool:
         """
         Run the complete lending automation process
 
@@ -2044,9 +2100,11 @@ class FundingLendingAutomation:
                         self.console.print(f"[yellow]⚠️  Requested amount (${old_amount:,.2f}) exceeds wallet balance[/yellow]")
                         self.console.print(f"[green]✅ Adjusted lending amount to wallet balance: ${total_amount:,.2f}[/green]")
 
-                    if total_amount < min_order:
+                    # Check minimum order size - can be bypassed with allow_small_orders flag
+                    effective_min_order = min_order if not allow_small_orders else 150.0  # Bitfinex minimum
+                    if total_amount < effective_min_order:
                         balance_type = "effective balance" if cancel_existing and effective_balance > wallet_balance else "wallet balance"
-                        self.console.print(f"[red]❌ {balance_type.title()} (${total_amount:,.2f}) is less than minimum order size (${min_order:,.2f})[/red]")
+                        self.console.print(f"[red]❌ {balance_type.title()} (${total_amount:,.2f}) is less than minimum order size (${effective_min_order:,.2f})[/red]")
                         return False
             else:
                 self.console.print(f"[yellow]⚠️  Could not retrieve wallet balance, proceeding with requested amount[/yellow]")
@@ -2061,7 +2119,7 @@ class FundingLendingAutomation:
             # Step 3: Generate order strategy
             orders = self.generate_order_strategy(
                 recommendation, total_amount, min_order, max_orders,
-                target_period=target_period  # Pass the target period
+                target_period=target_period, allow_small_orders=allow_small_orders
             )
             self.display_order_strategy(orders, symbol, wallet_balance, pending_total)
 
@@ -2114,10 +2172,11 @@ class FundingLendingAutomation:
 @click.option('--cancel-existing', is_flag=True, help='Cancel all existing funding offers before placing new ones')
 @click.option('--parallel/--sequential', default=False, help='Use parallel processing for faster order submission (default: sequential for reliability)')
 @click.option('--max-workers', type=int, default=3, help='Maximum number of parallel workers (default: 3)')
+@click.option('--allow-small-orders', is_flag=True, help='Allow orders smaller than minimum order size (minimum still 150)')
 @click.option('--no-confirm', is_flag=True, help='Skip user confirmation (use with caution)')
 @click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
 @click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
-def funding_lend_automation(symbol, total_amount, min_order, max_orders, max_rate_increment, rate_interval, target_period, cancel_existing, parallel, max_workers, no_confirm, api_key, api_secret):
+def funding_lend_automation(symbol, total_amount, min_order, max_orders, max_rate_increment, rate_interval, target_period, cancel_existing, parallel, max_workers, allow_small_orders, no_confirm, api_key, api_secret):
     """Automated funding lending strategy with market analysis and tiered orders"""
     try:
         if not api_key or not api_secret:
@@ -2136,21 +2195,36 @@ def funding_lend_automation(symbol, total_amount, min_order, max_orders, max_rat
             available_balance = automation._get_funding_wallet_balance(symbol)
             pending_offers = automation._get_pending_offers_total(symbol) or 0
 
-            if available_balance is not None and available_balance > 0:
+            # Check if we have any balance available (wallet balance or pending offers that can be cancelled)
+            has_wallet_balance = available_balance is not None and available_balance > 0
+            has_pending_offers = cancel_existing and pending_offers is not None and pending_offers > 0
+
+            if has_wallet_balance or has_pending_offers:
                 # Calculate effective balance considering pending offers
-                effective_balance = available_balance + (pending_offers if cancel_existing else 0)
+                effective_balance = (available_balance or 0) + (pending_offers if cancel_existing else 0)
                 total_amount = effective_balance
                 print(f"Using all available balance: ${total_amount:,.2f}")
-                if cancel_existing and pending_offers > 0:
+                if has_wallet_balance and has_pending_offers:
+                    print(f"  (Includes ${available_balance:,.2f} wallet balance + ${pending_offers:,.2f} from pending offers)")
+                elif has_wallet_balance:
+                    print(f"  (From wallet balance only)")
+                elif has_pending_offers:
                     print(f"  (Includes ${pending_offers:,.2f} from pending offers that will be cancelled)")
             else:
-                raise ValueError(f"Unable to retrieve balance for {symbol} or balance is zero")
+                raise ValueError(f"Unable to retrieve balance for {symbol} or no balance available")
 
         # Now validate the final total_amount
         if total_amount <= 0:
             raise ValueError("Total amount must be positive")
-        if total_amount < min_order:
+
+        # Check minimum order size - can be bypassed with allow_small_orders flag
+        if not allow_small_orders and total_amount < min_order:
             raise ValueError(f"Total amount (${total_amount:,.2f}) must be at least minimum order size (${min_order:,.2f})")
+
+        # Always enforce Bitfinex minimum order size (150)
+        bitfinex_min = 150.0
+        if total_amount < bitfinex_min:
+            raise ValueError(f"Total amount (${total_amount:,.2f}) must be at least Bitfinex minimum (${bitfinex_min:,.2f})")
 
         # Run automation
         confirm = not no_confirm
@@ -2161,7 +2235,8 @@ def funding_lend_automation(symbol, total_amount, min_order, max_orders, max_rat
             max_orders=max_orders,
             target_period=target_period,
             confirm=confirm,
-            cancel_existing=cancel_existing
+            cancel_existing=cancel_existing,
+            allow_small_orders=allow_small_orders
         )
 
         if success:

@@ -51,6 +51,7 @@ CMD_ARGS=(
 [ "${AUTO_LENDING_CANCEL_EXISTING:-true}" = "true" ] && CMD_ARGS+=("--cancel-existing")
 [ "${AUTO_LENDING_PARALLEL:-false}" = "true" ] && CMD_ARGS+=("--parallel")
 [ -n "${AUTO_LENDING_MAX_WORKERS}" ] && CMD_ARGS+=("--max-workers" "${AUTO_LENDING_MAX_WORKERS}")
+[ "${AUTO_LENDING_ALLOW_SMALL_ORDERS:-false}" = "true" ] && CMD_ARGS+=("--allow-small-orders")
 [ "${AUTO_LENDING_NO_CONFIRM:-true}" = "true" ] && CMD_ARGS+=("--no-confirm")
 
 # Log the command being executed (without sensitive info)

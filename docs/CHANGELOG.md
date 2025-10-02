@@ -35,15 +35,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Now: Considers effective balance when cancellation is enabled
   - Eliminates false "insufficient balance" errors
 
+- **Use All Balance Edge Case**: Fixed balance retrieval when wallet is empty but pending offers exist
+  - Previously: Failed with "Unable to retrieve balance" when wallet_balance = 0
+  - Now: Correctly calculates effective balance from pending offers when cancel_existing=True
+  - Enables proper "use all available balance" functionality even with zero wallet balance
+
 - **CLI Validation Order**: Fixed validation sequence in funding-lend-automation command
   - Previously: Validated total_amount=0 before converting to "use all available balance"
   - Now: Converts total_amount=0 to effective balance before validation
   - Properly handles "use all available balance" feature with pending offer cancellation
 
+### Added
+- **Allow Small Orders Feature**: New `--allow-small-orders` parameter for flexible minimum order control
+  - Allows orders smaller than configured minimum order size
+  - Always enforces Bitfinex platform minimum (150 units)
+  - Useful for testing or when exact balance amounts are below configured minimums
+  - Provides flexibility while maintaining platform compliance
+
+### Changed
+- **API Rate Limits**: Improved rate limiting for better throughput
+  - Sequential processing: Increased to 60 requests/minute (from 30)
+  - Parallel processing: Increased to 60 requests/minute (from 20)
+  - Optimized intervals: Sequential 250ms, Parallel 500ms
+  - Better balance between speed and API stability
+
 ### Technical
 - **API Enhancement**: Added bulk cancellation method to `AuthenticatedBitfinexAPI`
 - **CLI Commands**: New command for canceling multiple offers with detailed results
 - **Order Generation**: Improved algorithm for complete fund utilization
+- **Rate Limiting**: Enhanced rate limiter with configurable intervals
 
 ## [2.2.1] - 2025-10-02
 
@@ -175,7 +195,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version History Summary
 
-- **2.2.2** (2025-10-02): Enhanced order cancellation and fixed order amount distribution
+- **2.2.2** (2025-10-02): Enhanced order cancellation, fixed order distribution, allow small orders feature, and improved rate limits
 - **2.2.1** (2025-10-02): Docker permission fixes and stability improvements
 - **2.2.0** (2025-10-02): Complete Docker containerization and automation framework
 - **2.1.0** (2025-10-02): Parallel processing fixes and reliability enhancements
