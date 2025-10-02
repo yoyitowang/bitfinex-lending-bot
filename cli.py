@@ -1693,6 +1693,107 @@ class FundingLendingAutomation:
                     # Check for specific errors that should be retried
                     if self._should_retry_error(error_msg):
                         if attempt < max_retries - 1:
+                            # Special handling for nonce errors - longer wait time
+                            if 'nonce' in error_msg.lower():
+                                wait_time = min(3 ** attempt, 20)  # More aggressive backoff for nonce errors
+                            else:
+                                wait_time = min(2 ** attempt, 10)  # Standard exponential backoff
+                            time.sleep(wait_time)
+                            continue
+
+                    return {
+                        'index': i,
+                        'success': False,
+                        'message': f"Order {i} failed: {error_msg}",
+                        'order': order,
+                        'attempts': attempt + 1
+                    }
+
+            except Exception as e:
+                error_str = str(e)
+
+                # Check for specific errors that should be retried
+                if self._should_retry_error(error_str):
+                    if attempt < max_retries - 1:
+                        # Special handling for nonce errors - longer wait time
+                        if 'nonce' in error_str.lower():
+                            wait_time = min(3 ** attempt, 20)  # More aggressive backoff for nonce errors
+                        else:
+                            wait_time = min(2 ** attempt, 10)  # Standard exponential backoff
+                        time.sleep(wait_time)
+                        continue
+
+                return {
+                    'index': i,
+                    'success': False,
+                    'message': f"Order {i} error: {error_str}",
+                    'order': order,
+                    'attempts': attempt + 1
+                }
+
+        # If we get here, all retries failed
+        return {
+            'index': i,
+            'success': False,
+            'message': f"Order {i} failed after {max_retries} attempts",
+            'order': order,
+            'attempts': max_retries
+        }
+
+    def _should_retry_error(self, error_msg: str) -> bool:
+        """Check if an error should trigger a retry"""
+        retry_errors = [
+            'nonce: small',  # Nonce too small
+            'nonce: Not bigger than previous',  # Nonce not increasing
+            '10114',  # Nonce related error code
+            'temporarily unavailable',  # Temporary API issues
+            'rate limit',  # Rate limiting
+            'timeout',  # Network timeouts
+            'connection',  # Connection issues
+        ]
+
+        error_lower = error_msg.lower()
+        return any(retry_error in error_lower for retry_error in retry_errors)
+
+    def _submit_order_with_dedicated_api(self, order_info: Dict[str, Any], rate_limiter: RateLimiter, max_retries: int = 3) -> Dict[str, Any]:
+        """Submit a single order with a dedicated API instance to avoid nonce conflicts"""
+        i, order, symbol = order_info['index'], order_info['order'], order_info['symbol']
+        api_key, api_secret = order_info['api_key'], order_info['api_secret']
+
+        # Create dedicated API instance for this thread with nonce offset
+        import time
+        nonce_offset = int(time.time() * 1000) + (i * 1000)  # Offset by thread index
+        dedicated_api = AuthenticatedBitfinexAPI(api_key, api_secret)
+        # Try to set a unique nonce if possible
+        if hasattr(dedicated_api.client, '_nonce'):
+            dedicated_api.client._nonce = nonce_offset
+
+        for attempt in range(max_retries):
+            try:
+                # Apply rate limiting
+                rate_limiter.wait_if_needed()
+
+                notification = dedicated_api.post_funding_offer(
+                    symbol=f"f{symbol}",
+                    amount=order.amount,
+                    rate=order.daily_rate,
+                    period=order.period_days
+                )
+
+                if notification and notification.status == "SUCCESS":
+                    return {
+                        'index': i,
+                        'success': True,
+                        'message': f"Order {i} submitted successfully" + (f" (retry {attempt + 1})" if attempt > 0 else ""),
+                        'order': order,
+                        'attempts': attempt + 1
+                    }
+                else:
+                    error_msg = notification.text if notification else "Unknown error"
+
+                    # Check for specific errors that should be retried
+                    if self._should_retry_error(error_msg):
+                        if attempt < max_retries - 1:
                             wait_time = min(2 ** attempt, 10)  # Exponential backoff, max 10 seconds
                             time.sleep(wait_time)
                             continue
@@ -1732,21 +1833,6 @@ class FundingLendingAutomation:
             'attempts': max_retries
         }
 
-    def _should_retry_error(self, error_msg: str) -> bool:
-        """Check if an error should trigger a retry"""
-        retry_errors = [
-            'nonce: small',  # Nonce too small
-            'nonce: Not bigger than previous',  # Nonce not increasing
-            '10114',  # Nonce related error code
-            'temporarily unavailable',  # Temporary API issues
-            'rate limit',  # Rate limiting
-            'timeout',  # Network timeouts
-            'connection',  # Connection issues
-        ]
-
-        error_lower = error_msg.lower()
-        return any(retry_error in error_lower for retry_error in retry_errors)
-
     def execute_lending_strategy(self, orders: List[LendingOrder], symbol: str, parallel: bool = True, max_workers: int = 3) -> bool:
         """
         Execute lending orders with optional parallel processing
@@ -1773,19 +1859,24 @@ class FundingLendingAutomation:
         successful_orders = 0
         failed_orders = 0
 
-        # Create rate limiter (15 requests per minute for safety, 200ms minimum interval)
-        rate_limiter = RateLimiter(max_calls_per_minute=15, min_interval_ms=200)
+        # Create rate limiter (optimized for better throughput)
+        if parallel:
+            rate_limiter = RateLimiter(max_calls_per_minute=20, min_interval_ms=500)  # Parallel: 20 calls/min, 500ms interval
+        else:
+            rate_limiter = RateLimiter(max_calls_per_minute=30, min_interval_ms=200)  # Sequential: 30 calls/min, 200ms interval
 
         if parallel and len(orders) > 1:
-            # Parallel execution
-            self.console.print(f"[dim]Using {max_workers} parallel workers with rate limiting[/dim]")
+            # Parallel execution with separate API instances for each worker
+            self.console.print(f"[dim]Using {max_workers} parallel workers with individual API instances[/dim]")
 
             # Prepare order info for parallel processing
             order_infos = [
                 {
                     'index': i + 1,
                     'order': order,
-                    'symbol': symbol
+                    'symbol': symbol,
+                    'api_key': self.auth_api.api_key,
+                    'api_secret': self.auth_api.api_secret
                 }
                 for i, order in enumerate(orders)
             ]
@@ -1794,7 +1885,7 @@ class FundingLendingAutomation:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit all orders
                 future_to_order = {
-                    executor.submit(self.submit_single_order, order_info, rate_limiter): order_info
+                    executor.submit(self._submit_order_with_dedicated_api, order_info, rate_limiter): order_info
                     for order_info in order_infos
                 }
 
@@ -1941,8 +2032,8 @@ class FundingLendingAutomation:
                     self.console.print(f"[yellow]⚠️  Error cancelling existing offers: {str(e)}[/yellow]")
                     self.console.print("[dim]Continuing with new order placement...[/dim]")
 
-            # Step 6: Execute orders
-            success = self.execute_lending_strategy(orders, symbol, parallel=True, max_workers=3)
+            # Step 6: Execute orders (using sequential for reliability)
+            success = self.execute_lending_strategy(orders, symbol, parallel=False, max_workers=1)
 
             return success
 
@@ -1959,7 +2050,7 @@ class FundingLendingAutomation:
 @click.option('--rate-interval', type=float, default=0.000005, help='Rate interval between orders in decimal (0.000005 = 0.0005%)')
 @click.option('--target-period', type=int, default=2, help='Target lending period in days (2 = shortest term)')
 @click.option('--cancel-existing', is_flag=True, help='Cancel all existing funding offers before placing new ones')
-@click.option('--parallel/--sequential', default=True, help='Use parallel processing for faster order submission (default: parallel)')
+@click.option('--parallel/--sequential', default=False, help='Use parallel processing for faster order submission (default: sequential for reliability)')
 @click.option('--max-workers', type=int, default=3, help='Maximum number of parallel workers (default: 3)')
 @click.option('--no-confirm', is_flag=True, help='Skip user confirmation (use with caution)')
 @click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')

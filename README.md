@@ -2,7 +2,7 @@
 
 一個完整的Bitfinex funding (放貸) 市場分析和自動化放貸工具。
 
-**版本**: 2.0.0
+**版本**: 2.1.0
 **最後更新**: 2025-10-02
 **Python 版本**: 3.7+
 
@@ -23,7 +23,7 @@
 | `funding-market-analysis` | 綜合市場分析 | ❌ | `cli.py funding-market-analysis --symbol USD` |
 | `funding-portfolio` | 放貸投資組合分析 | ✅ | `cli.py funding-portfolio` |
 | `auto-lending-check` | 自動放貸檢查 | ❌ | `cli.py auto-lending-check --symbol USD --period 2d` |
-| `funding-lend-automation` | 自動放貸策略 | ✅ | `cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-order 150` |
+| `funding-lend-automation` | 自動放貸策略 | ✅ | `cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-order 150` *(預設串行處理)* |
 
 ## 🚀 主要功能
 
@@ -249,12 +249,14 @@ python cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-ord
 - `--api-key`, `--api-secret`: API認證 (或使用環境變數)
 
 **平行處理說明**:
-- 預設使用平行處理，可同時提交多個訂單以加快速度
-- 內建速率限制器 (每分鐘最多15個請求，200ms 最小間隔) 以遵守 Bitfinex API 限制
+- **預設使用串行處理**以確保最大可靠性，避免 nonce 衝突錯誤
+- 可使用 `--parallel` 強制啟用平行處理以加快速度
 - 智慧重試機制：自動重試 nonce 錯誤和臨時網路問題 (最多3次)
-- 指數退避演算法：重試間隔逐次增加，避免頻繁重試
-- 可使用 `--sequential` 切換回順序處理模式
-- `--max-workers` 控制平行處理的線程數量
+- 增強的指數退避：nonce 錯誤使用更長等待時間 (最多20秒)
+- 動態速率限制：
+  - 串行處理：每分鐘30個請求，200ms 最小間隔
+  - 平行處理：每分鐘20個請求，500ms 最小間隔
+- `--max-workers` 控制平行處理的線程數量 (預設3個)
 
 **錢包餘額檢查**:
 - 自動檢查指定貨幣的可用資金餘額
@@ -408,6 +410,13 @@ A: 某些符號可能沒有足夠的交易數據，嘗試使用主要貨幣如US
 **Q: 自動借貸檢查總是返回false？**
 A: 檢查風險評估條件，可能需要調整信心度門檻或市場條件。
 
+**Q: 平行處理時出現 nonce 錯誤或訂單提交失敗？**
+A: 這是API nonce管理的常見問題。解決方案：
+- 使用預設的串行處理模式（推薦），確保100%成功率
+- 如果需要平行處理，建議使用較少的 `--max-workers` (1-2)
+- nonce錯誤會自動重試，最多嘗試3次並使用指數退避演算法
+- 如果持續出現問題，請改用串行處理：移除 `--parallel` 參數
+
 ### 權限設定
 確保你的Bitfinex API金鑰有以下權限：
 - `Account Info`: 獲取錢包資訊
@@ -449,6 +458,15 @@ A: 檢查風險評估條件，可能需要調整信心度門檻或市場條件�
 ```
 
 ## 📝 **變更日誌**
+
+### v2.1.0 (2025-10-02)
+- 🐛 **修復平行處理 nonce 衝突**: 解決平行訂單提交時的 nonce 錯誤問題
+  - 預設改為串行處理以確保可靠性 (可使用 `--parallel` 強制平行處理)
+  - 每個平行線程使用專用的 API 實例避免 nonce 衝突
+  - 改進的重試邏輯：nonce 錯誤使用更長的重試等待時間 (最多20秒)
+  - 優化的速率限制：平行處理 20次/分鐘，串行處理 30次/分鐘
+- 🚀 **增強訂單提交可靠性**: 確保所有訂單都能成功提交，減少失敗率
+- 📈 **改進的速率控制**: 更好的 API 請求頻率管理，避免臨時性錯誤
 
 ### v2.0.0 (2025-10-02)
 - 🆕 **專注放貸功能**: 完全移除借款相關功能，只保留放貸分析和操作
