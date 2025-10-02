@@ -23,26 +23,28 @@ services:
         # Create log directory
         mkdir -p /app/logs
 
-        # Setup cron job if enabled
+        # Auto lending loop script
         if [ \"\${AUTO_LENDING_ENABLED:-true}\" = 'true' ]; then
-          echo \"Setting up cron job with schedule: \${AUTO_LENDING_CRON_SCHEDULE:-*/10 * * * *}\"
+          echo 'Auto lending is enabled. Starting automated execution loop...'
+          echo \"Execution interval: \${AUTO_LENDING_INTERVAL:-600} seconds\"
+          echo 'Logs will be available at /app/logs/auto_lending.log'
 
-          # Create cron job
-          echo \"\${AUTO_LENDING_CRON_SCHEDULE:-*/10 * * * *} /app/run_auto_lending.sh\" > /etc/cron.d/auto-lending
+          # Initial execution
+          echo 'Running initial auto lending execution...'
+          /app/run_auto_lending.sh || echo 'Initial execution failed'
 
-          # Set proper permissions
-          chmod 0644 /etc/cron.d/auto-lending
-          crontab /etc/cron.d/auto-lending
+          # Main loop for periodic execution
+          while true; do
+            echo \"Sleeping for \${AUTO_LENDING_INTERVAL:-600} seconds until next execution...\"
+            sleep \${AUTO_LENDING_INTERVAL:-600}
 
-          # Start cron daemon
-          cron
-
-          echo 'Auto lending cron job configured. Logs will be available at /app/logs/auto_lending.log'
-          echo 'Container will run indefinitely to keep cron active...'
-          tail -f /app/logs/auto_lending.log
+            echo 'Running scheduled auto lending execution...'
+            /app/run_auto_lending.sh || echo 'Scheduled execution failed'
+          done
         else
           echo 'Auto lending is disabled. Running in manual mode...'
           echo 'Use docker-compose exec bitfinex-lending-bot bash to access the container'
+          echo 'Or run: docker-compose exec bitfinex-lending-bot /app/run_auto_lending.sh'
           sleep infinity
         fi
       "

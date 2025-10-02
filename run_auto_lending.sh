@@ -7,6 +7,8 @@ set -e  # Exit on any error
 
 # Log function
 log() {
+    # Ensure log directory exists
+    mkdir -p "$(dirname "${LOG_FILE:-/app/logs/auto_lending.log}")"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "${LOG_FILE:-/app/logs/auto_lending.log}"
 }
 

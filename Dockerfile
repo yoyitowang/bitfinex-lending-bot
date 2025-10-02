@@ -5,9 +5,8 @@ FROM python:3.9-slim
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Install system dependencies
+# Install system dependencies (minimal)
 RUN apt-get update && apt-get install -y \
-    cron \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
