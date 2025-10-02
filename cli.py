@@ -1816,6 +1816,23 @@ class FundingLendingAutomation:
         self.console.print(f"\n[bold]Results: {successful_orders} successful, {failed_orders} failed[/bold]")
         return failed_orders == 0
 
+    def _get_funding_wallet_balance(self, symbol: str) -> Optional[float]:
+        """Get available balance for funding currency"""
+        try:
+            wallets = self.auth_api.get_wallets()
+            if wallets:
+                for wallet in wallets:
+                    # Check if this wallet matches our funding symbol
+                    wallet_currency = getattr(wallet, 'currency', '')
+                    if wallet_currency.upper() == symbol.upper():
+                        # For funding currencies, we need to check available balance
+                        available_balance = getattr(wallet, 'available_balance', 0)
+                        return float(available_balance)
+            return None
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Could not retrieve wallet balance: {str(e)}[/yellow]")
+            return None
+
     def run_automation(self, symbol: str, total_amount: float, min_order: float,
                       max_orders: int = 50, target_period: int = 30, confirm: bool = True,
                       cancel_existing: bool = False) -> bool:
@@ -1825,6 +1842,25 @@ class FundingLendingAutomation:
         Returns True if successful
         """
         try:
+            # Check wallet balance first
+            self.console.print(f"\n[bold cyan]💰 Checking Wallet Balance for f{symbol}[/bold cyan]")
+            wallet_balance = self._get_funding_wallet_balance(symbol)
+
+            if wallet_balance is not None:
+                self.console.print(f"Available balance for f{symbol}: ${wallet_balance:,.2f}")
+
+                if total_amount > wallet_balance:
+                    old_amount = total_amount
+                    total_amount = wallet_balance
+                    self.console.print(f"[yellow]⚠️  Requested amount (${old_amount:,.2f}) exceeds available balance[/yellow]")
+                    self.console.print(f"[green]✅ Adjusted lending amount to available balance: ${total_amount:,.2f}[/green]")
+
+                    if total_amount < min_order:
+                        self.console.print(f"[red]❌ Available balance (${total_amount:,.2f}) is less than minimum order size (${min_order:,.2f})[/red]")
+                        return False
+            else:
+                self.console.print(f"[yellow]⚠️  Could not retrieve wallet balance, proceeding with requested amount[/yellow]")
+
             # Step 1: Analyze market
             self.display_market_analysis(symbol)
 

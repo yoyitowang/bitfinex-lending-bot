@@ -222,7 +222,7 @@ python cli.py auto-lending-check --symbol USD --period 2d --min-confidence 0.7
 ```bash
 python cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-order 150 --max-orders 50 --rate-interval 0.000005 --cancel-existing --parallel --max-workers 3
 ```
-**功能**: 自動分析市場數據，基於funding book最低掛單利率生成競爭性放貸策略，並可選擇自動提交多筆訂單。支援平行處理以加快訂單提交速度。
+**功能**: 自動分析市場數據，基於funding book最低掛單利率生成競爭性放貸策略，並可選擇自動提交多筆訂單。支援平行處理以加快訂單提交速度。會自動檢查錢包餘額並防止超出可用資金。
 **參數**:
 - `--symbol`: 貨幣符號 (預設: USD)
 - `--total-amount`: 總放貸金額 (預設: 1000)
@@ -244,6 +244,12 @@ python cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-ord
 - 指數退避演算法：重試間隔逐次增加，避免頻繁重試
 - 可使用 `--sequential` 切換回順序處理模式
 - `--max-workers` 控制平行處理的線程數量
+
+**錢包餘額檢查**:
+- 自動檢查指定貨幣的可用資金餘額
+- 如果請求金額超過可用餘額，自動調整為使用全部可用餘額
+- 確保不會因為資金不足而導致訂單提交失敗
+- 提供清晰的餘額和調整信息
 
 **工作流程**:
 1. **市場分析**: 從funding book數據獲取最低掛單利率
