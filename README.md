@@ -220,9 +220,9 @@ python cli.py auto-lending-check --symbol USD --period 2d --min-confidence 0.7
 
 #### 12. 自動化放貸策略
 ```bash
-python cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-order 150 --max-orders 50 --rate-interval 0.000005 --cancel-existing
+python cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-order 150 --max-orders 50 --rate-interval 0.000005 --cancel-existing --parallel --max-workers 3
 ```
-**功能**: 自動分析市場數據，基於funding book最低掛單利率生成競爭性放貸策略，並可選擇自動提交多筆訂單
+**功能**: 自動分析市場數據，基於funding book最低掛單利率生成競爭性放貸策略，並可選擇自動提交多筆訂單。支援平行處理以加快訂單提交速度。
 **參數**:
 - `--symbol`: 貨幣符號 (預設: USD)
 - `--total-amount`: 總放貸金額 (預設: 1000)
@@ -232,8 +232,16 @@ python cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-ord
 - `--max-rate-increment`: 最大利率增幅範圍 (預設: 0.0001 = 0.01%)
 - `--target-period`: 目標貸款期間 (預設: 2天)
 - `--cancel-existing`: 在放置新訂單前取消所有現有的放貸訂單
+- `--parallel/--sequential`: 使用平行處理加快訂單提交 (預設: parallel)
+- `--max-workers`: 平行處理的最大工作線程數 (預設: 3)
 - `--no-confirm`: 跳過用戶確認 (慎用)
 - `--api-key`, `--api-secret`: API認證 (或使用環境變數)
+
+**平行處理說明**:
+- 預設使用平行處理，可同時提交多個訂單以加快速度
+- 內建速率限制器 (每分鐘最多30個請求) 以遵守 Bitfinex API 限制
+- 可使用 `--sequential` 切換回順序處理模式
+- `--max-workers` 控制平行處理的線程數量
 
 **工作流程**:
 1. **市場分析**: 從funding book數據獲取最低掛單利率

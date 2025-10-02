@@ -5,6 +5,8 @@ import time
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 from bitfinex_api import BitfinexAPI
 from authenticated_api import AuthenticatedBitfinexAPI
 from funding_market_analyzer import FundingMarketAnalyzer, FundingMarketAnalysis
@@ -14,6 +16,28 @@ from rich.panel import Panel
 from rich.prompt import Confirm
 
 console = Console()
+
+class RateLimiter:
+    """Simple rate limiter to control API request frequency"""
+    def __init__(self, max_calls_per_minute: int = 30):
+        self.max_calls_per_minute = max_calls_per_minute
+        self.calls = []
+        self.lock = threading.Lock()
+
+    def wait_if_needed(self):
+        """Wait if necessary to respect rate limits"""
+        with self.lock:
+            now = time.time()
+            # Remove calls older than 1 minute
+            self.calls = [call_time for call_time in self.calls if now - call_time < 60]
+
+            if len(self.calls) >= self.max_calls_per_minute:
+                # Wait until the oldest call is more than 1 minute old
+                sleep_time = 60 - (now - self.calls[0])
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+
+            self.calls.append(now)
 
 def is_windows_terminal():
     """Detect if running in Windows terminal that supports Rich formatting"""
@@ -1615,9 +1639,54 @@ class FundingLendingAutomation:
         self.console.print(strategy_table)
         self.console.print(f"[bold]Total Amount: ${total_amount:,.2f}[/bold]")
 
-    def execute_lending_strategy(self, orders: List[LendingOrder], symbol: str) -> bool:
+    def submit_single_order(self, order_info: Dict[str, Any], rate_limiter: RateLimiter) -> Dict[str, Any]:
+        """Submit a single order with rate limiting"""
+        i, order, symbol = order_info['index'], order_info['order'], order_info['symbol']
+
+        # Apply rate limiting
+        rate_limiter.wait_if_needed()
+
+        try:
+            notification = self.auth_api.post_funding_offer(
+                symbol=f"f{symbol}",
+                amount=order.amount,
+                rate=order.daily_rate,
+                period=order.period_days
+            )
+
+            if notification and notification.status == "SUCCESS":
+                return {
+                    'index': i,
+                    'success': True,
+                    'message': f"Order {i} submitted successfully",
+                    'order': order
+                }
+            else:
+                error_msg = notification.text if notification else "Unknown error"
+                return {
+                    'index': i,
+                    'success': False,
+                    'message': f"Order {i} failed: {error_msg}",
+                    'order': order
+                }
+
+        except Exception as e:
+            return {
+                'index': i,
+                'success': False,
+                'message': f"Order {i} error: {str(e)}",
+                'order': order
+            }
+
+    def execute_lending_strategy(self, orders: List[LendingOrder], symbol: str, parallel: bool = True, max_workers: int = 3) -> bool:
         """
-        Execute lending orders
+        Execute lending orders with optional parallel processing
+
+        Args:
+            orders: List of orders to submit
+            symbol: Trading symbol
+            parallel: Whether to use parallel processing
+            max_workers: Maximum number of parallel workers
 
         Returns True if successful, False otherwise
         """
@@ -1625,37 +1694,67 @@ class FundingLendingAutomation:
             self.console.print("[red]API credentials not provided[/red]")
             return False
 
-        self.console.print(f"\n[bold red]Executing Lending Strategy for f{symbol}[/bold red]")
+        if not orders:
+            self.console.print("[yellow]No orders to execute[/yellow]")
+            return True
+
+        mode_text = "[bold blue]PARALLEL[/bold blue]" if parallel else "[bold green]SEQUENTIAL[/bold green]"
+        self.console.print(f"\n[bold red]Executing Lending Strategy for f{symbol} ({mode_text})[/bold red]")
 
         successful_orders = 0
         failed_orders = 0
 
-        for i, order in enumerate(orders, 1):
-            self.console.print(f"Submitting order {i}/{len(orders)}: "
-                             f"${order.amount:.2f} at {order.daily_rate*100:.4f}% for {order.period_days} days")
+        # Create rate limiter (30 requests per minute for safety)
+        rate_limiter = RateLimiter(max_calls_per_minute=30)
 
-            try:
-                notification = self.auth_api.post_funding_offer(
-                    symbol=f"f{symbol}",
-                    amount=order.amount,
-                    rate=order.daily_rate,
-                    period=order.period_days
-                )
+        if parallel and len(orders) > 1:
+            # Parallel execution
+            self.console.print(f"[dim]Using {max_workers} parallel workers with rate limiting[/dim]")
 
-                if notification and notification.status == "SUCCESS":
-                    self.console.print(f"[green]Order {i} submitted successfully[/green]")
+            # Prepare order info for parallel processing
+            order_infos = [
+                {
+                    'index': i + 1,
+                    'order': order,
+                    'symbol': symbol
+                }
+                for i, order in enumerate(orders)
+            ]
+
+            # Use ThreadPoolExecutor for parallel processing
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all orders
+                future_to_order = {
+                    executor.submit(self.submit_single_order, order_info, rate_limiter): order_info
+                    for order_info in order_infos
+                }
+
+                # Process results as they complete
+                for future in as_completed(future_to_order):
+                    result = future.result()
+                    if result['success']:
+                        self.console.print(f"[green]{result['message']}[/green]")
+                        successful_orders += 1
+                    else:
+                        self.console.print(f"[red]{result['message']}[/red]")
+                        failed_orders += 1
+
+        else:
+            # Sequential execution (original method)
+            for i, order in enumerate(orders, 1):
+                self.console.print(f"Submitting order {i}/{len(orders)}: "
+                                 f"${order.amount:.2f} at {order.daily_rate*100:.4f}% for {order.period_days} days")
+
+                result = self.submit_single_order({
+                    'index': i,
+                    'order': order,
+                    'symbol': symbol
+                }, rate_limiter)
+
+                if result['success']:
                     successful_orders += 1
                 else:
-                    error_msg = notification.text if notification else "Unknown error"
-                    self.console.print(f"[red]Order {i} failed: {error_msg}[/red]")
                     failed_orders += 1
-
-                # Rate limiting - wait between orders
-                time.sleep(0.5)
-
-            except Exception as e:
-                self.console.print(f"[red]Order {i} error: {str(e)}[/red]")
-                failed_orders += 1
 
         self.console.print(f"\n[bold]Results: {successful_orders} successful, {failed_orders} failed[/bold]")
         return failed_orders == 0
@@ -1713,7 +1812,7 @@ class FundingLendingAutomation:
                     self.console.print("[dim]Continuing with new order placement...[/dim]")
 
             # Step 6: Execute orders
-            success = self.execute_lending_strategy(orders, symbol)
+            success = self.execute_lending_strategy(orders, symbol, parallel=True, max_workers=3)
 
             return success
 
@@ -1730,10 +1829,12 @@ class FundingLendingAutomation:
 @click.option('--rate-interval', type=float, default=0.000005, help='Rate interval between orders in decimal (0.000005 = 0.0005%)')
 @click.option('--target-period', type=int, default=2, help='Target lending period in days (2 = shortest term)')
 @click.option('--cancel-existing', is_flag=True, help='Cancel all existing funding offers before placing new ones')
+@click.option('--parallel/--sequential', default=True, help='Use parallel processing for faster order submission (default: parallel)')
+@click.option('--max-workers', type=int, default=3, help='Maximum number of parallel workers (default: 3)')
 @click.option('--no-confirm', is_flag=True, help='Skip user confirmation (use with caution)')
 @click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
 @click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
-def funding_lend_automation(symbol, total_amount, min_order, max_orders, max_rate_increment, rate_interval, target_period, cancel_existing, no_confirm, api_key, api_secret):
+def funding_lend_automation(symbol, total_amount, min_order, max_orders, max_rate_increment, rate_interval, target_period, cancel_existing, parallel, max_workers, no_confirm, api_key, api_secret):
     """Automated funding lending strategy with market analysis and tiered orders"""
     try:
         if not api_key or not api_secret:
