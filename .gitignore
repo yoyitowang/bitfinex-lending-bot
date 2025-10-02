@@ -135,3 +135,5 @@ funding_analysis_cache/
 *.tmp
 *.temp
 .cache/
+
+.roo/
