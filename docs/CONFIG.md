@@ -230,6 +230,27 @@ AUTO_LENDING_TOTAL_AMOUNT=1000  # Start small
 AUTO_LENDING_MAX_ORDERS=10      # Limit order count
 ```
 
+### "Use All Available Balance" Feature
+
+Set `AUTO_LENDING_TOTAL_AMOUNT=0` to automatically use all available funds:
+
+```bash
+AUTO_LENDING_TOTAL_AMOUNT=0  # Use all available balance
+```
+
+When combined with `AUTO_LENDING_CANCEL_EXISTING=true`, this uses the effective balance:
+
+```
+Effective Balance = Wallet Balance + Pending Offers Total
+```
+
+**Example:**
+- Wallet Balance: $500
+- Pending Offers: $2,000 (will be cancelled)
+- Effective Balance: $2,500 (all funds used for new lending)
+
+This prevents false "insufficient balance" errors when existing offers will be cancelled to free up funds.
+
 ### Rate Limits
 
 ```bash

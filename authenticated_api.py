@@ -89,3 +89,15 @@ class AuthenticatedBitfinexAPI:
         except Exception as e:
             print(f"Failed to cancel all funding offers: {e}")
             return None
+
+    def cancel_funding_offers(self, offer_ids: List[int]) -> List[Optional[Notification]]:
+        """Cancel multiple specific funding offers by their IDs"""
+        results = []
+        for offer_id in offer_ids:
+            try:
+                notification = self.cancel_funding_offer(offer_id)
+                results.append(notification)
+            except Exception as e:
+                print(f"Failed to cancel funding offer {offer_id}: {e}")
+                results.append(None)
+        return results

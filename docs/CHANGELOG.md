@@ -5,6 +5,46 @@ All notable changes to the Bitfinex Funding/Lending API Scripts will be document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.2] - 2025-10-02
+
+### Added
+- **Enhanced Order Cancellation**: New bulk cancellation capabilities
+  - `cancel_funding_offers()` method for canceling multiple specific offers
+  - `cancel-funding-offers` CLI command for bulk cancellation by offer IDs
+  - Support for comma-separated offer ID lists
+  - Individual error handling for each cancellation attempt
+
+- **Improved Order Strategy Logic**: Fixed remaining amount handling
+  - Corrected `generate_order_strategy()` to properly merge remaining amounts
+  - Last order now includes leftover funds that don't fill complete minimum orders
+  - Ensures full utilization of available lending balance
+
+- **Smart Balance Calculation**: Enhanced lending automation balance checking
+  - When `cancel_existing=True`, system now considers pending offers as available funds
+  - Calculates "effective balance" = wallet_balance + pending_offers_total
+  - Prevents false "insufficient balance" errors when offers will be cancelled first
+  - More accurate balance validation for automation workflows
+
+### Fixed
+- **Order Amount Distribution**: Resolved issue where remaining amounts were ignored
+  - Previously: 5 orders × $150 = $750 (ignoring $108.99 remainder)
+  - Now: 4 orders × $150 + 1 order × $258.99 = $858.99 (full utilization)
+
+- **Balance Validation Logic**: Fixed incorrect balance checking in automation
+  - Previously: Only checked wallet balance, ignored pending offers that would be cancelled
+  - Now: Considers effective balance when cancellation is enabled
+  - Eliminates false "insufficient balance" errors
+
+- **CLI Validation Order**: Fixed validation sequence in funding-lend-automation command
+  - Previously: Validated total_amount=0 before converting to "use all available balance"
+  - Now: Converts total_amount=0 to effective balance before validation
+  - Properly handles "use all available balance" feature with pending offer cancellation
+
+### Technical
+- **API Enhancement**: Added bulk cancellation method to `AuthenticatedBitfinexAPI`
+- **CLI Commands**: New command for canceling multiple offers with detailed results
+- **Order Generation**: Improved algorithm for complete fund utilization
+
 ## [2.2.1] - 2025-10-02
 
 ### Fixed
@@ -135,6 +175,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version History Summary
 
+- **2.2.2** (2025-10-02): Enhanced order cancellation and fixed order amount distribution
 - **2.2.1** (2025-10-02): Docker permission fixes and stability improvements
 - **2.2.0** (2025-10-02): Complete Docker containerization and automation framework
 - **2.1.0** (2025-10-02): Parallel processing fixes and reliability enhancements

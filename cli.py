@@ -975,6 +975,43 @@ def cancel_all_funding_offers(symbol, api_key, api_secret):
         print("Please set BITFINEX_API_KEY and BITFINEX_API_SECRET environment variables or provide them as options.")
 
 @cli.command()
+@click.option('--offer-ids', required=True, help='Comma-separated list of funding offer IDs to cancel (e.g., "12345,67890")')
+@click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
+@click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
+def cancel_funding_offers(offer_ids, api_key, api_secret):
+    """Cancel multiple specific funding offers by their IDs"""
+    try:
+        # Parse offer IDs from comma-separated string
+        offer_id_list = [int(id.strip()) for id in offer_ids.split(',') if id.strip()]
+
+        if not offer_id_list:
+            print("Error: No valid offer IDs provided")
+            return
+
+        api = AuthenticatedBitfinexAPI(api_key, api_secret)
+        results = api.cancel_funding_offers(offer_id_list)
+
+        successful = 0
+        failed = 0
+
+        for i, (offer_id, result) in enumerate(zip(offer_id_list, results)):
+            if result and result.status == "SUCCESS":
+                print(f"✅ Successfully cancelled funding offer {offer_id}: {result.data}")
+                successful += 1
+            else:
+                error_msg = result.text if result else "Unknown error"
+                print(f"❌ Failed to cancel funding offer {offer_id}: {error_msg}")
+                failed += 1
+
+        print(f"\nResults: {successful} successful, {failed} failed")
+
+    except ValueError as e:
+        print(f"Error: {e}")
+        print("Please set BITFINEX_API_KEY and BITFINEX_API_SECRET environment variables or provide them as options.")
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+
+@cli.command()
 @click.option('--symbol', default='USD', help='Funding currency symbol (e.g., USD, BTC)')
 def funding_market_analysis(symbol):
     """Comprehensive funding market analysis with statistics and strategy recommendations"""
@@ -1469,8 +1506,8 @@ class FundingLendingAutomation:
         )
 
     def generate_order_strategy(self, recommendation: LendingRecommendation,
-                               total_amount: float, min_order: float,
-                               max_orders: int = 50, target_period: int = 2) -> List[LendingOrder]:
+                                total_amount: float, min_order: float,
+                                max_orders: int = 50, target_period: int = 2) -> List[LendingOrder]:
         """
         Generate lending orders strategy based on market lowest offer rate
 
@@ -1478,7 +1515,7 @@ class FundingLendingAutomation:
         1. Base rate = lowest offer rate from funding book
         2. Each subsequent order increases by rate_interval (default 0.005%)
         3. Calculate maximum number of full orders: floor(total_amount / min_order)
-        4. All orders use min_order amount
+        4. Create orders with min_order amount, then merge remaining amount to last order
 
         Args:
             recommendation: Rate recommendation (base rate from lowest offer)
@@ -1494,11 +1531,15 @@ class FundingLendingAutomation:
             return []  # Cannot create even one order
 
         # Calculate maximum number of full orders
-        num_orders = int(total_amount // min_order)
-        num_orders = min(num_orders, max_orders)  # Respect max_orders limit
+        num_full_orders = int(total_amount // min_order)
+        num_orders = min(num_full_orders, max_orders)  # Respect max_orders limit
 
         if num_orders == 0:
             return []
+
+        # Calculate remaining amount after creating full orders
+        used_amount = num_orders * min_order
+        remaining_amount = total_amount - used_amount
 
         # Strategy parameters
         base_rate = recommendation.recommended_daily_rate
@@ -1508,8 +1549,13 @@ class FundingLendingAutomation:
             # Calculate rate for this order (start from base rate, increment by interval)
             current_rate = base_rate + (i * self.rate_interval)
 
+            # For the last order, add remaining amount
+            order_amount = min_order
+            if i == num_orders - 1 and remaining_amount > 0:
+                order_amount += remaining_amount
+
             order = LendingOrder(
-                amount=min_order,  # All orders use minimum order size
+                amount=order_amount,
                 daily_rate=current_rate,
                 period_days=target_period,
                 yearly_rate=current_rate * 365
@@ -1976,15 +2022,31 @@ class FundingLendingAutomation:
                 elif pending_total == 0:
                     self.console.print(f"Pending lending offers total: $0.00")
 
-                # Use wallet balance for lending amount validation
-                if total_amount > wallet_balance:
+                # Calculate effective available balance considering pending offers cancellation
+                effective_balance = wallet_balance
+                if cancel_existing and pending_total is not None and pending_total > 0:
+                    effective_balance = wallet_balance + pending_total
+                    self.console.print(f"Effective available balance (after cancelling pending offers): ${effective_balance:,.2f}")
+                    self.console.print(f"  Wallet balance: ${wallet_balance:,.2f}")
+                    self.console.print(f"  Pending offers: ${pending_total:,.2f}")
+
+                # Use effective balance for lending amount validation
+                if total_amount > effective_balance:
                     old_amount = total_amount
-                    total_amount = wallet_balance
-                    self.console.print(f"[yellow]⚠️  Requested amount (${old_amount:,.2f}) exceeds wallet balance[/yellow]")
-                    self.console.print(f"[green]✅ Adjusted lending amount to wallet balance: ${total_amount:,.2f}[/green]")
+                    if cancel_existing and effective_balance > wallet_balance:
+                        # If cancelling offers would make more funds available, use effective balance
+                        total_amount = effective_balance
+                        self.console.print(f"[yellow]⚠️  Requested amount (${old_amount:,.2f}) exceeds current wallet balance[/yellow]")
+                        self.console.print(f"[green]✅ Adjusted lending amount to effective balance (including pending offers cancellation): ${total_amount:,.2f}[/green]")
+                    else:
+                        # Fall back to wallet balance only
+                        total_amount = wallet_balance
+                        self.console.print(f"[yellow]⚠️  Requested amount (${old_amount:,.2f}) exceeds wallet balance[/yellow]")
+                        self.console.print(f"[green]✅ Adjusted lending amount to wallet balance: ${total_amount:,.2f}[/green]")
 
                     if total_amount < min_order:
-                        self.console.print(f"[red]❌ Wallet balance (${total_amount:,.2f}) is less than minimum order size (${min_order:,.2f})[/red]")
+                        balance_type = "effective balance" if cancel_existing and effective_balance > wallet_balance else "wallet balance"
+                        self.console.print(f"[red]❌ {balance_type.title()} (${total_amount:,.2f}) is less than minimum order size (${min_order:,.2f})[/red]")
                         return False
             else:
                 self.console.print(f"[yellow]⚠️  Could not retrieve wallet balance, proceeding with requested amount[/yellow]")
@@ -2061,30 +2123,34 @@ def funding_lend_automation(symbol, total_amount, min_order, max_orders, max_rat
         if not api_key or not api_secret:
             raise ValueError("API credentials required")
 
-        # Validate inputs
-        if total_amount <= 0:
-            raise ValueError("Total amount must be positive")
+        # Validate minimum order size (this is always required)
         if min_order <= 0:
             raise ValueError("Minimum order size must be positive")
-        if total_amount < min_order:
-            raise ValueError("Total amount must be at least minimum order size")
 
         # Initialize automation system
         automation = FundingLendingAutomation(api_key, api_secret, rate_interval)
 
-        # If total_amount is 0, use all available balance
+        # Handle "use all available balance" case (total_amount = 0)
         if total_amount == 0:
             print(f"Total amount set to 0, retrieving available balance for {symbol}...")
             available_balance = automation._get_funding_wallet_balance(symbol)
+            pending_offers = automation._get_pending_offers_total(symbol) or 0
+
             if available_balance is not None and available_balance > 0:
-                total_amount = available_balance
+                # Calculate effective balance considering pending offers
+                effective_balance = available_balance + (pending_offers if cancel_existing else 0)
+                total_amount = effective_balance
                 print(f"Using all available balance: ${total_amount:,.2f}")
+                if cancel_existing and pending_offers > 0:
+                    print(f"  (Includes ${pending_offers:,.2f} from pending offers that will be cancelled)")
             else:
                 raise ValueError(f"Unable to retrieve balance for {symbol} or balance is zero")
 
-        # Validate final total_amount
+        # Now validate the final total_amount
         if total_amount <= 0:
             raise ValueError("Total amount must be positive")
+        if total_amount < min_order:
+            raise ValueError(f"Total amount (${total_amount:,.2f}) must be at least minimum order size (${min_order:,.2f})")
 
         # Run automation
         confirm = not no_confirm

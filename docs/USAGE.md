@@ -17,6 +17,7 @@ This guide provides comprehensive usage examples and command reference for the B
 | `funding-credits` | View active positions (alias) | Yes |
 | `funding-offer` | Submit lending offer | Yes |
 | `cancel-funding-offer` | Cancel specific offer | Yes |
+| `cancel-funding-offers` | Cancel multiple specific offers | Yes |
 | `cancel-all-funding-offers` | Cancel all offers | Yes |
 | `funding-market-analysis` | Comprehensive analysis | No |
 | `funding-portfolio` | Portfolio overview | Yes |
@@ -167,11 +168,31 @@ Remove existing lending offers.
 # Cancel specific offer by ID
 python cli.py cancel-funding-offer --offer-id 12345678
 
+# Cancel multiple specific offers by ID
+python cli.py cancel-funding-offers --offer-ids "12345678,87654321,11111111"
+
 # Cancel all offers
 python cli.py cancel-all-funding-offers
 
 # Cancel all offers for specific currency
 python cli.py cancel-all-funding-offers --symbol USD
+
+# Parameters for bulk cancellation:
+# --offer-ids: Comma-separated list of offer IDs to cancel
+```
+
+#### Bulk Cancellation Examples
+
+```bash
+# Cancel specific offers with detailed results
+python cli.py cancel-funding-offers --offer-ids "12345,67890,11111"
+
+# Output shows individual success/failure for each offer:
+# ✅ Successfully cancelled funding offer 12345: {...}
+# ❌ Failed to cancel funding offer 67890: Offer not found
+# ✅ Successfully cancelled funding offer 11111: {...}
+#
+# Results: 2 successful, 1 failed
 ```
 
 ## 📈 Analysis Commands
@@ -263,12 +284,16 @@ python cli.py funding-lend-automation \
 
 ### Automated Execution Flow
 
-1. **Market Analysis**: Analyzes current funding book data
-2. **Rate Strategy**: Finds optimal rates based on market lowest offers
-3. **Order Generation**: Creates ladder of orders with incremental rates
-4. **Balance Check**: Verifies sufficient funds
-5. **Order Submission**: Places orders sequentially for reliability
-6. **Result Reporting**: Shows success/failure statistics
+1. **Balance Assessment**: Checks wallet balance and pending offers
+   - Calculates effective balance when cancellation is enabled
+   - Considers pending offers as available funds if they will be cancelled
+2. **Market Analysis**: Analyzes current funding book data
+3. **Rate Strategy**: Finds optimal rates based on market lowest offers
+4. **Order Generation**: Creates ladder of orders with incremental rates
+5. **Balance Check**: Verifies sufficient effective funds
+6. **Offer Cancellation**: Cancels existing offers if requested
+7. **Order Submission**: Places orders sequentially for reliability
+8. **Result Reporting**: Shows success/failure statistics
 
 ## 🔧 Advanced Usage
 

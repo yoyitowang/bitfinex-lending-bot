@@ -121,6 +121,11 @@ result = api.cancel_funding_offer(offer_id)
 # Parameters: offer_id (int)
 # Returns: Notification object
 
+# Cancel multiple specific offers
+results = api.cancel_funding_offers([12345, 67890, 11111])
+# Parameters: offer_ids (List[int])
+# Returns: List of Notification objects (one per offer ID)
+
 # Cancel all offers
 result = api.cancel_all_funding_offers("fUSD")
 # Parameters: symbol (str, optional)
