@@ -71,3 +71,21 @@ class AuthenticatedBitfinexAPI:
         except Exception as e:
             print(f"Failed to submit funding offer: {e}")
             return None
+
+    def cancel_funding_offer(self, offer_id: int) -> Optional[Notification]:
+        """Cancel a specific funding offer"""
+        try:
+            notification = self.client.rest.auth.cancel_funding_offer(id=offer_id)
+            return notification
+        except Exception as e:
+            print(f"Failed to cancel funding offer: {e}")
+            return None
+
+    def cancel_all_funding_offers(self, symbol: Optional[str] = None) -> Optional[Notification]:
+        """Cancel all funding offers, optionally filtered by symbol"""
+        try:
+            notification = self.client.rest.auth.cancel_all_funding_offers(currency=symbol)
+            return notification
+        except Exception as e:
+            print(f"Failed to cancel all funding offers: {e}")
+            return None

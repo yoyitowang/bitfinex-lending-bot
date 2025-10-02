@@ -907,6 +907,47 @@ def funding_offer(symbol, amount, rate, period, api_key, api_secret):
         print("Please set BITFINEX_API_KEY and BITFINEX_API_SECRET environment variables or provide them as options.")
 
 @cli.command()
+@click.option('--offer-id', required=True, type=int, help='Offer ID to cancel')
+@click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
+@click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
+def cancel_funding_offer(offer_id, api_key, api_secret):
+    """Cancel a specific funding offer"""
+    try:
+        api = AuthenticatedBitfinexAPI(api_key, api_secret)
+        notification = api.cancel_funding_offer(offer_id)
+        if notification:
+            if notification.status == "SUCCESS":
+                print(f"Successfully cancelled funding offer {offer_id}: {notification.data}")
+            else:
+                print(f"Failed to cancel funding offer: {notification.text}")
+        else:
+            print("Failed to cancel funding offer")
+    except ValueError as e:
+        print(f"Error: {e}")
+        print("Please set BITFINEX_API_KEY and BITFINEX_API_SECRET environment variables or provide them as options.")
+
+@cli.command()
+@click.option('--symbol', help='Funding symbol (e.g., fUSD) - optional, cancels all if not specified')
+@click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
+@click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
+def cancel_all_funding_offers(symbol, api_key, api_secret):
+    """Cancel all funding offers, optionally filtered by symbol"""
+    try:
+        api = AuthenticatedBitfinexAPI(api_key, api_secret)
+        notification = api.cancel_all_funding_offers(symbol)
+        if notification:
+            if notification.status == "SUCCESS":
+                filter_msg = f" for {symbol}" if symbol else ""
+                print(f"Successfully cancelled all funding offers{filter_msg}: {notification.data}")
+            else:
+                print(f"Failed to cancel all funding offers: {notification.text}")
+        else:
+            print("Failed to cancel all funding offers")
+    except ValueError as e:
+        print(f"Error: {e}")
+        print("Please set BITFINEX_API_KEY and BITFINEX_API_SECRET environment variables or provide them as options.")
+
+@cli.command()
 @click.option('--symbol', default='USD', help='Funding currency symbol (e.g., USD, BTC)')
 def funding_market_analysis(symbol):
     """Comprehensive funding market analysis with statistics and strategy recommendations"""

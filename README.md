@@ -14,6 +14,8 @@
 | `funding-active-lends` | 已借出資金 | ✅ | `cli.py funding-active-lends` |
 | `funding-credits` | 活躍借款 | ✅ | `cli.py funding-credits` |
 | `funding-offer` | 提交借貸單 | ✅ | `cli.py funding-offer --symbol fUSD --amount 100 --rate 0.00015 --period 30` |
+| `cancel-funding-offer` | 取消單筆放貸訂單 | ✅ | `cli.py cancel-funding-offer --offer-id 12345` |
+| `cancel-all-funding-offers` | 取消所有放貸訂單 | ✅ | `cli.py cancel-all-funding-offers --symbol fUSD` |
 | `funding-market-analysis` | 綜合分析 | ❌ | `cli.py funding-market-analysis --symbol USD` |
 | `funding-portfolio` | 投資組合分析 | ✅ | `cli.py funding-portfolio` |
 | `auto-lending-check` | 自動借貸檢查 | ❌ | `cli.py auto-lending-check --symbol USD --period 2d` |
@@ -177,6 +179,24 @@ python cli.py funding-offer --symbol fUSD --amount 100 --rate 0.00015 --period 3
 - `--period`: 貸款期限，單位天 (必需)
 **需求**: API金鑰設定
 
+#### 10. 取消單筆Funding放貸訂單
+```bash
+python cli.py cancel-funding-offer --offer-id 12345
+```
+**功能**: 取消指定的funding放貸訂單
+**參數**:
+- `--offer-id`: 訂單ID (必需，整數)
+**需求**: API金鑰設定
+
+#### 11. 取消所有Funding放貸訂單
+```bash
+python cli.py cancel-all-funding-offers --symbol fUSD
+```
+**功能**: 取消所有funding放貸訂單，可選按貨幣符號過濾
+**參數**:
+- `--symbol`: 貨幣符號 (可選，如不指定則取消所有訂單)
+**需求**: API金鑰設定
+
 ### 🤖 **進階分析命令**
 
 #### 10. 綜合市場分析
@@ -256,6 +276,11 @@ wallets = auth_api.get_wallets()
 offers = auth_api.get_funding_offers()
 credits = auth_api.get_funding_credits()
 auth_api.post_funding_offer("fUSD", 100, 0.00015, 30)
+
+# 取消訂單
+auth_api.cancel_funding_offer(12345)  # 取消單筆訂單
+auth_api.cancel_all_funding_offers("fUSD")  # 取消所有 fUSD 訂單
+auth_api.cancel_all_funding_offers()  # 取消所有訂單
 ```
 
 #### 市場分析器使用
@@ -358,6 +383,8 @@ A: 檢查風險評估條件，可能需要調整信心度門檻或市場條件�
 ### 認證端點
 - [Wallets](https://docs.bitfinex.com/reference/rest-auth-wallets)
 - [Funding Offers](https://docs.bitfinex.com/reference/rest-auth-funding-offers)
+- [Cancel Funding Offer](https://docs.bitfinex.com/reference/rest-auth-cancel-funding-offer)
+- [Cancel All Funding Offers](https://docs.bitfinex.com/reference/rest-auth-cancel-all-funding-offers)
 
 ### 完整API文檔
 - [Bitfinex API Reference](https://docs.bitfinex.com/v2/reference)
