@@ -518,10 +518,10 @@ def format_funding_portfolio(portfolio_data: Dict[str, Any]) -> str:
         # 投資組合總覽表格
         overview_table = Table(title="Portfolio Overview", show_header=True, header_style="bold magenta")
         overview_table.add_column("Metric", style="cyan", no_wrap=True)
-        overview_table.add_column("Pending Lends", style="blue", justify="right")
-        overview_table.add_column("Active Lends", style="green", justify="right")
-        overview_table.add_column("Borrows", style="red", justify="right")
-        overview_table.add_column("Net", style="yellow", justify="right")
+        overview_table.add_column("Pending Offers", style="blue", justify="right")
+        overview_table.add_column("Borrowed Funds", style="green", justify="right")
+        overview_table.add_column("Lent Funds", style="red", justify="right")
+        overview_table.add_column("Net Position", style="yellow", justify="right")
 
         overview_table.add_row(
             "Available for Lending",
@@ -533,65 +533,66 @@ def format_funding_portfolio(portfolio_data: Dict[str, Any]) -> str:
         overview_table.add_row(
             "Total Amount",
             f"${summary['total_pending_lending_amount']:,.2f}",
-            f"${summary['total_active_lending_amount']:,.2f}",
-            f"${summary['total_borrowing_amount']:,.2f}",
+            f"${summary['total_borrowing_amount']:,.2f}",        # Active Borrows (borrowed money)
+            f"${summary['total_active_lending_amount']:,.2f}",  # Active Lends (lent out money)
             f"${summary['net_exposure']:,.2f}"
         )
         overview_table.add_row(
             "Active Positions",
             str(summary['pending_offers_count']),
-            str(summary['active_lends_count']),
-            str(summary['borrowing_credits_count']),
+            str(summary['borrowing_credits_count']),             # Active Borrows count
+            str(summary['active_lends_count']),                  # Active Lends count
             ""
         )
 
-        # 日利率和年利率 (只顯示active lends的利率，因為收益只從已借出計算)
-        active_daily_rate = active_lending['weighted_avg_rate']
-        active_yearly_rate = active_daily_rate * 365
-        borrowing_daily_rate = borrowing['weighted_avg_rate']
+        # 日利率和年利率 (根據用戶的理解調整顯示)
+        borrowing_daily_rate = borrowing['weighted_avg_rate']    # Active Borrows rate
         borrowing_yearly_rate = borrowing_daily_rate * 365
-        net_daily_rate = active_daily_rate - borrowing_daily_rate
+        active_daily_rate = active_lending['weighted_avg_rate']  # Active Lends rate
+        active_yearly_rate = active_daily_rate * 365
+        net_daily_rate = active_daily_rate - borrowing_daily_rate  # Lends - Borrows
         net_yearly_rate = net_daily_rate * 365
 
         overview_table.add_row(
             "Avg Daily Rate",
             "",
-            f"{active_daily_rate*100:.4f}%",
-            f"{borrowing_daily_rate*100:.4f}%",
+            f"{borrowing_daily_rate*100:.4f}%",  # Active Borrows rate
+            f"{active_daily_rate*100:.4f}%",     # Active Lends rate
             f"{net_daily_rate*100:.4f}%"
         )
         overview_table.add_row(
             "Avg Yearly Rate",
             "",
-            f"{active_yearly_rate*100:.2f}%",
-            f"{borrowing_yearly_rate*100:.2f}%",
+            f"{borrowing_yearly_rate*100:.2f}%", # Active Borrows rate
+            f"{active_yearly_rate*100:.2f}%",    # Active Lends rate
             f"{net_yearly_rate*100:.2f}%"
         )
 
         # 收益分析表格
         income_table = Table(title="Income Analysis", show_header=True, header_style="bold green")
         income_table.add_column("Period", style="cyan")
-        income_table.add_column("Income", style="green", justify="right")
-        income_table.add_column("Cost", style="red", justify="right")
+        income_table.add_column("Borrowing Cost", style="green", justify="right")
+        income_table.add_column("Lending Income", style="red", justify="right")
         income_table.add_column("Net", style="yellow", justify="right")
 
-        income_table.add_row("Daily", f"${income['estimated_daily_income']:.2f}", f"${income['estimated_daily_cost']:.2f}", f"${income['net_daily_income']:.2f}")
-        income_table.add_row("Yearly", f"${income['estimated_yearly_income']:.2f}", f"${income['estimated_yearly_cost']:.2f}", f"${income['net_yearly_income']:.2f}")
-        income_table.add_row("Margin", f"{(income['estimated_yearly_income']/summary['total_lending_amount']*100):.2f}%" if summary['total_lending_amount'] > 0 else "0%", "", f"{income['net_income_margin']:.2f}%")
+        # 根據調整後的術語，Active Borrows是借來的錢（成本），Active Lends是借出的錢（收益）
+        income_table.add_row("Daily", f"${income['estimated_daily_cost']:.2f}", f"${income['estimated_daily_income']:.2f}", f"${income['net_daily_income']:.2f}")
+        income_table.add_row("Yearly", f"${income['estimated_yearly_cost']:.2f}", f"${income['estimated_yearly_income']:.2f}", f"${income['net_yearly_income']:.2f}")
+        income_table.add_row("Margin", "", f"{(income['estimated_yearly_income']/summary['total_lending_amount']*100):.2f}%" if summary['total_lending_amount'] > 0 else "0%", f"{income['net_income_margin']:.2f}%")
 
         # 期間分佈表格
         period_table = Table(title="Period Distribution", show_header=True, header_style="bold blue")
         period_table.add_column("Period", style="cyan")
-        period_table.add_column("Pending Lends", style="blue", justify="right")
-        period_table.add_column("Active Lends", style="green", justify="right")
-        period_table.add_column("Borrows", style="red", justify="right")
+        period_table.add_column("Pending Offers", style="blue", justify="right")
+        period_table.add_column("Borrowed Funds", style="green", justify="right")
+        period_table.add_column("Lent Funds", style="red", justify="right")
 
         all_periods = set(periods['pending_periods'].keys()) | set(periods['active_periods'].keys()) | set(periods['borrowing_periods'].keys())
         for period in sorted(all_periods):
             pending_count = periods['pending_periods'].get(period, 0)
-            active_count = periods['active_periods'].get(period, 0)
-            borrowing_count = periods['borrowing_periods'].get(period, 0)
-            period_table.add_row(period, str(pending_count), str(active_count), str(borrowing_count))
+            borrowing_count = periods['borrowing_periods'].get(period, 0)  # Active Borrows
+            active_count = periods['active_periods'].get(period, 0)       # Active Lends
+            period_table.add_row(period, str(pending_count), str(borrowing_count), str(active_count))
 
         # 風險指標
         risk_text = Text()
@@ -646,26 +647,26 @@ def format_funding_portfolio(portfolio_data: Dict[str, Any]) -> str:
         output += f"Active Lends:            {summary['active_lends_count']}\n"
         output += f"Borrowing Credits:       {summary['borrowing_credits_count']}\n"
 
-        # 日利率和年利率 (只顯示active lends的利率，因為收益只從已借出計算)
-        active_daily_rate = active_lending['weighted_avg_rate']
-        active_yearly_rate = active_daily_rate * 365
-        borrowing_daily_rate = borrowing['weighted_avg_rate']
+        # 日利率和年利率 (根據調整後的術語顯示)
+        borrowing_daily_rate = borrowing['weighted_avg_rate']      # Active Borrows rate
         borrowing_yearly_rate = borrowing_daily_rate * 365
-        net_daily_rate = active_daily_rate - borrowing_daily_rate
+        active_daily_rate = active_lending['weighted_avg_rate']    # Active Lends rate
+        active_yearly_rate = active_daily_rate * 365
+        net_daily_rate = active_daily_rate - borrowing_daily_rate   # Lends - Borrows
         net_yearly_rate = net_daily_rate * 365
 
-        output += f"Avg Daily Rate (A/B/N): {active_daily_rate*100:.4f}% / {borrowing_daily_rate*100:.4f}% / {net_daily_rate*100:.4f}%\n"
-        output += f"Avg Yearly Rate (A/B/N): {active_yearly_rate*100:.2f}% / {borrowing_yearly_rate*100:.2f}% / {net_yearly_rate*100:.2f}%\n\n"
+        output += f"Avg Daily Rate (AB/AL/N): {borrowing_daily_rate*100:.4f}% / {active_daily_rate*100:.4f}% / {net_daily_rate*100:.4f}%\n"
+        output += f"Avg Yearly Rate (AB/AL/N): {borrowing_yearly_rate*100:.2f}% / {active_yearly_rate*100:.2f}% / {net_yearly_rate*100:.2f}%\n\n"
 
         # 收益分析
         output += "INCOME ANALYSIS:\n"
-        output += f"Daily Income:           ${income['estimated_daily_income']:.2f}\n"
-        output += f"Daily Cost:             ${income['estimated_daily_cost']:.2f}\n"
-        output += f"Net Daily Income:       ${income['net_daily_income']:.2f}\n"
-        output += f"Yearly Income:          ${income['estimated_yearly_income']:.2f}\n"
-        output += f"Yearly Cost:            ${income['estimated_yearly_cost']:.2f}\n"
-        output += f"Net Yearly Income:      ${income['net_yearly_income']:.2f}\n"
-        output += f"Net Income Margin:      {income['net_income_margin']:.2f}%\n\n"
+        output += f"Daily Borrowing Cost:    ${income['estimated_daily_cost']:.2f}\n"
+        output += f"Daily Lending Income:    ${income['estimated_daily_income']:.2f}\n"
+        output += f"Net Daily Income:        ${income['net_daily_income']:.2f}\n"
+        output += f"Yearly Borrowing Cost:   ${income['estimated_yearly_cost']:.2f}\n"
+        output += f"Yearly Lending Income:   ${income['estimated_yearly_income']:.2f}\n"
+        output += f"Net Yearly Income:       ${income['net_yearly_income']:.2f}\n"
+        output += f"Net Income Margin:       {income['net_income_margin']:.2f}%\n\n"
 
         # 掛單放貸統計
         output += "PENDING LENDING STATISTICS:\n"
@@ -682,7 +683,7 @@ def format_funding_portfolio(portfolio_data: Dict[str, Any]) -> str:
         output += f"Rate Range:             {active_lending['rate_range']['min']*100:.4f}% - {active_lending['rate_range']['max']*100:.4f}%\n\n"
 
         # 借款統計
-        output += "BORROWING STATISTICS:\n"
+        output += "ACTIVE BORROWING STATISTICS:\n"
         output += f"Total Amount:           ${borrowing['total_amount']:,.2f}\n"
         output += f"Average Rate:           {borrowing['avg_rate']*100:.4f}%\n"
         output += f"Weighted Avg Rate:      {borrowing['weighted_avg_rate']*100:.4f}%\n\n"
@@ -697,14 +698,14 @@ def format_funding_portfolio(portfolio_data: Dict[str, Any]) -> str:
 
         # 期間分佈
         output += "PERIOD DISTRIBUTION:\n"
-        output += "Pending Lends:\n"
+        output += "Pending Offers:\n"
         for period, count in periods['pending_periods'].items():
             output += f"  {period}: {count} positions\n"
-        output += "Active Lends:\n"
-        for period, count in periods['active_periods'].items():
-            output += f"  {period}: {count} positions\n"
-        output += "Borrowing:\n"
+        output += "Borrowed Funds:\n"
         for period, count in periods['borrowing_periods'].items():
+            output += f"  {period}: {count} positions\n"
+        output += "Lent Funds:\n"
+        for period, count in periods['active_periods'].items():
             output += f"  {period}: {count} positions\n"
 
         return output.strip()
@@ -869,7 +870,7 @@ def funding_credits(symbol, api_key, api_secret):
 @click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
 @click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
 def funding_active_lends(symbol, api_key, api_secret):
-    """Get user's active lent positions (already lent out funds that are earning interest)"""
+    """Get user's active lending positions (funds that have been lent out and are earning interest)"""
     try:
         api = AuthenticatedBitfinexAPI(api_key, api_secret)
         loans = api.get_funding_loans(symbol)
@@ -877,7 +878,7 @@ def funding_active_lends(symbol, api_key, api_secret):
             formatted = format_funding_loans(loans)
             print(formatted)
         else:
-            print("No active lent positions found")
+            print("No active lending positions found")
     except ValueError as e:
         print(f"Error: {e}")
         print("Please set BITFINEX_API_KEY and BITFINEX_API_SECRET environment variables or provide them as options.")
