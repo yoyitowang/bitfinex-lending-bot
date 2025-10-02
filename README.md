@@ -239,7 +239,9 @@ python cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-ord
 
 **平行處理說明**:
 - 預設使用平行處理，可同時提交多個訂單以加快速度
-- 內建速率限制器 (每分鐘最多30個請求) 以遵守 Bitfinex API 限制
+- 內建速率限制器 (每分鐘最多15個請求，200ms 最小間隔) 以遵守 Bitfinex API 限制
+- 智慧重試機制：自動重試 nonce 錯誤和臨時網路問題 (最多3次)
+- 指數退避演算法：重試間隔逐次增加，避免頻繁重試
 - 可使用 `--sequential` 切換回順序處理模式
 - `--max-workers` 控制平行處理的線程數量
 

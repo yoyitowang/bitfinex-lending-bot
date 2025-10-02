@@ -19,18 +19,29 @@ console = Console()
 
 class RateLimiter:
     """Simple rate limiter to control API request frequency"""
-    def __init__(self, max_calls_per_minute: int = 30):
+    def __init__(self, max_calls_per_minute: int = 30, min_interval_ms: int = 100):
         self.max_calls_per_minute = max_calls_per_minute
+        self.min_interval_ms = min_interval_ms  # Minimum interval between calls in milliseconds
         self.calls = []
+        self.last_call_time = 0
         self.lock = threading.Lock()
 
     def wait_if_needed(self):
         """Wait if necessary to respect rate limits"""
         with self.lock:
             now = time.time()
+            now_ms = int(now * 1000)
+
             # Remove calls older than 1 minute
             self.calls = [call_time for call_time in self.calls if now - call_time < 60]
 
+            # Ensure minimum interval between calls (for nonce safety)
+            time_since_last_call = now_ms - self.last_call_time
+            if time_since_last_call < self.min_interval_ms:
+                sleep_time = (self.min_interval_ms - time_since_last_call) / 1000.0
+                time.sleep(sleep_time)
+
+            # Check rate limit
             if len(self.calls) >= self.max_calls_per_minute:
                 # Wait until the oldest call is more than 1 minute old
                 sleep_time = 60 - (now - self.calls[0])
@@ -38,6 +49,7 @@ class RateLimiter:
                     time.sleep(sleep_time)
 
             self.calls.append(now)
+            self.last_call_time = int(time.time() * 1000)
 
 def is_windows_terminal():
     """Detect if running in Windows terminal that supports Rich formatting"""
@@ -1639,44 +1651,89 @@ class FundingLendingAutomation:
         self.console.print(strategy_table)
         self.console.print(f"[bold]Total Amount: ${total_amount:,.2f}[/bold]")
 
-    def submit_single_order(self, order_info: Dict[str, Any], rate_limiter: RateLimiter) -> Dict[str, Any]:
-        """Submit a single order with rate limiting"""
+    def submit_single_order(self, order_info: Dict[str, Any], rate_limiter: RateLimiter, max_retries: int = 3) -> Dict[str, Any]:
+        """Submit a single order with rate limiting and retry logic"""
         i, order, symbol = order_info['index'], order_info['order'], order_info['symbol']
 
-        # Apply rate limiting
-        rate_limiter.wait_if_needed()
+        for attempt in range(max_retries):
+            try:
+                # Apply rate limiting
+                rate_limiter.wait_if_needed()
 
-        try:
-            notification = self.auth_api.post_funding_offer(
-                symbol=f"f{symbol}",
-                amount=order.amount,
-                rate=order.daily_rate,
-                period=order.period_days
-            )
+                notification = self.auth_api.post_funding_offer(
+                    symbol=f"f{symbol}",
+                    amount=order.amount,
+                    rate=order.daily_rate,
+                    period=order.period_days
+                )
 
-            if notification and notification.status == "SUCCESS":
-                return {
-                    'index': i,
-                    'success': True,
-                    'message': f"Order {i} submitted successfully",
-                    'order': order
-                }
-            else:
-                error_msg = notification.text if notification else "Unknown error"
+                if notification and notification.status == "SUCCESS":
+                    return {
+                        'index': i,
+                        'success': True,
+                        'message': f"Order {i} submitted successfully" + (f" (retry {attempt + 1})" if attempt > 0 else ""),
+                        'order': order,
+                        'attempts': attempt + 1
+                    }
+                else:
+                    error_msg = notification.text if notification else "Unknown error"
+
+                    # Check for specific errors that should be retried
+                    if self._should_retry_error(error_msg):
+                        if attempt < max_retries - 1:
+                            wait_time = min(2 ** attempt, 10)  # Exponential backoff, max 10 seconds
+                            time.sleep(wait_time)
+                            continue
+
+                    return {
+                        'index': i,
+                        'success': False,
+                        'message': f"Order {i} failed: {error_msg}",
+                        'order': order,
+                        'attempts': attempt + 1
+                    }
+
+            except Exception as e:
+                error_str = str(e)
+
+                # Check for specific errors that should be retried
+                if self._should_retry_error(error_str):
+                    if attempt < max_retries - 1:
+                        wait_time = min(2 ** attempt, 10)  # Exponential backoff, max 10 seconds
+                        time.sleep(wait_time)
+                        continue
+
                 return {
                     'index': i,
                     'success': False,
-                    'message': f"Order {i} failed: {error_msg}",
-                    'order': order
+                    'message': f"Order {i} error: {error_str}",
+                    'order': order,
+                    'attempts': attempt + 1
                 }
 
-        except Exception as e:
-            return {
-                'index': i,
-                'success': False,
-                'message': f"Order {i} error: {str(e)}",
-                'order': order
-            }
+        # If we get here, all retries failed
+        return {
+            'index': i,
+            'success': False,
+            'message': f"Order {i} failed after {max_retries} attempts",
+            'order': order,
+            'attempts': max_retries
+        }
+
+    def _should_retry_error(self, error_msg: str) -> bool:
+        """Check if an error should trigger a retry"""
+        retry_errors = [
+            'nonce: small',  # Nonce too small
+            'nonce: Not bigger than previous',  # Nonce not increasing
+            '10114',  # Nonce related error code
+            'temporarily unavailable',  # Temporary API issues
+            'rate limit',  # Rate limiting
+            'timeout',  # Network timeouts
+            'connection',  # Connection issues
+        ]
+
+        error_lower = error_msg.lower()
+        return any(retry_error in error_lower for retry_error in retry_errors)
 
     def execute_lending_strategy(self, orders: List[LendingOrder], symbol: str, parallel: bool = True, max_workers: int = 3) -> bool:
         """
@@ -1704,8 +1761,8 @@ class FundingLendingAutomation:
         successful_orders = 0
         failed_orders = 0
 
-        # Create rate limiter (30 requests per minute for safety)
-        rate_limiter = RateLimiter(max_calls_per_minute=30)
+        # Create rate limiter (15 requests per minute for safety, 200ms minimum interval)
+        rate_limiter = RateLimiter(max_calls_per_minute=15, min_interval_ms=200)
 
         if parallel and len(orders) > 1:
             # Parallel execution
