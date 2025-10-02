@@ -1661,7 +1661,8 @@ class FundingLendingAutomation:
         return failed_orders == 0
 
     def run_automation(self, symbol: str, total_amount: float, min_order: float,
-                      max_orders: int = 50, target_period: int = 30, confirm: bool = True) -> bool:
+                      max_orders: int = 50, target_period: int = 30, confirm: bool = True,
+                      cancel_existing: bool = False) -> bool:
         """
         Run the complete lending automation process
 
@@ -1689,12 +1690,29 @@ class FundingLendingAutomation:
             # Step 4: User confirmation
             if confirm:
                 self.console.print("\n[bold yellow]Confirm Execution[/bold yellow]")
+                if cancel_existing:
+                    self.console.print("[red]⚠️  WARNING: This will cancel ALL existing funding offers before placing new ones![/red]")
                 confirmed = Confirm.ask("Do you want to proceed with submitting these lending offers?", default=False)
                 if not confirmed:
                     self.console.print("[yellow]Operation cancelled by user[/yellow]")
                     return False
 
-            # Step 5: Execute orders
+            # Step 5: Cancel existing offers if requested
+            if cancel_existing:
+                self.console.print(f"\n[bold red]🗑️  Cancelling all existing funding offers...[/bold red]")
+                try:
+                    cancel_result = self.auth_api.cancel_all_funding_offers(symbol)
+                    if cancel_result and cancel_result.status == "SUCCESS":
+                        self.console.print("[green]✅ All existing funding offers cancelled successfully[/green]")
+                    else:
+                        error_msg = cancel_result.text if cancel_result else "Unknown error"
+                        self.console.print(f"[yellow]⚠️  Failed to cancel existing offers: {error_msg}[/yellow]")
+                        self.console.print("[dim]Continuing with new order placement...[/dim]")
+                except Exception as e:
+                    self.console.print(f"[yellow]⚠️  Error cancelling existing offers: {str(e)}[/yellow]")
+                    self.console.print("[dim]Continuing with new order placement...[/dim]")
+
+            # Step 6: Execute orders
             success = self.execute_lending_strategy(orders, symbol)
 
             return success
@@ -1711,10 +1729,11 @@ class FundingLendingAutomation:
 @click.option('--max-rate-increment', type=float, default=0.0001, help='Maximum rate increment from base in decimal (0.0001 = 0.01%)')
 @click.option('--rate-interval', type=float, default=0.000005, help='Rate interval between orders in decimal (0.000005 = 0.0005%)')
 @click.option('--target-period', type=int, default=2, help='Target lending period in days (2 = shortest term)')
+@click.option('--cancel-existing', is_flag=True, help='Cancel all existing funding offers before placing new ones')
 @click.option('--no-confirm', is_flag=True, help='Skip user confirmation (use with caution)')
 @click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
 @click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
-def funding_lend_automation(symbol, total_amount, min_order, max_orders, max_rate_increment, rate_interval, target_period, no_confirm, api_key, api_secret):
+def funding_lend_automation(symbol, total_amount, min_order, max_orders, max_rate_increment, rate_interval, target_period, cancel_existing, no_confirm, api_key, api_secret):
     """Automated funding lending strategy with market analysis and tiered orders"""
     try:
         if not api_key or not api_secret:
@@ -1739,7 +1758,8 @@ def funding_lend_automation(symbol, total_amount, min_order, max_orders, max_rat
             min_order=min_order,
             max_orders=max_orders,
             target_period=target_period,
-            confirm=confirm
+            confirm=confirm,
+            cancel_existing=cancel_existing
         )
 
         if success:

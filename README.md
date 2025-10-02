@@ -220,7 +220,7 @@ python cli.py auto-lending-check --symbol USD --period 2d --min-confidence 0.7
 
 #### 12. 自動化放貸策略
 ```bash
-python cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-order 150 --max-orders 50 --rate-interval 0.000005
+python cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-order 150 --max-orders 50 --rate-interval 0.000005 --cancel-existing
 ```
 **功能**: 自動分析市場數據，基於funding book最低掛單利率生成競爭性放貸策略，並可選擇自動提交多筆訂單
 **參數**:
@@ -231,6 +231,7 @@ python cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-ord
 - `--rate-interval`: 訂單間利率間隔 (預設: 0.000005 = 0.0005%)
 - `--max-rate-increment`: 最大利率增幅範圍 (預設: 0.0001 = 0.01%)
 - `--target-period`: 目標貸款期間 (預設: 2天)
+- `--cancel-existing`: 在放置新訂單前取消所有現有的放貸訂單
 - `--no-confirm`: 跳過用戶確認 (慎用)
 - `--api-key`, `--api-secret`: API認證 (或使用環境變數)
 
