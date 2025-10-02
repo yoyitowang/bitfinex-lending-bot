@@ -200,14 +200,15 @@ python cli.py auto-lending-check --symbol USD --period 2d --min-confidence 0.7
 
 #### 12. 自動化放貸策略
 ```bash
-python cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-order 150 --rate-interval 0.00005
+python cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-order 150 --max-orders 50 --rate-interval 0.000005
 ```
 **功能**: 自動分析市場數據，基於funding book最低掛單利率生成競爭性放貸策略，並可選擇自動提交多筆訂單
 **參數**:
 - `--symbol`: 貨幣符號 (預設: USD)
 - `--total-amount`: 總放貸金額 (預設: 1000)
 - `--min-order`: 最小訂單金額 (預設: 150)
-- `--rate-interval`: 訂單間利率間隔 (預設: 0.00005 = 0.005%)
+- `--max-orders`: 最大訂單數量 (預設: 50)
+- `--rate-interval`: 訂單間利率間隔 (預設: 0.000005 = 0.0005%)
 - `--max-rate-increment`: 最大利率增幅範圍 (預設: 0.0001 = 0.01%)
 - `--target-period`: 目標貸款期間 (預設: 2天)
 - `--no-confirm`: 跳過用戶確認 (慎用)
@@ -297,13 +298,14 @@ if decision_2d["should_lend"]:
 import subprocess
 import os
 
-def run_lending_automation(symbol="USD", total_amount=1000, min_order=150, rate_interval=0.00005):
+def run_lending_automation(symbol="USD", total_amount=1000, min_order=150, max_orders=50, rate_interval=0.000005):
     """程式化調用funding-lend-automation命令"""
     cmd = [
         "python", "cli.py", "funding-lend-automation",
         "--symbol", symbol,
         "--total-amount", str(total_amount),
         "--min-order", str(min_order),
+        "--max-orders", str(max_orders),
         "--rate-interval", str(rate_interval),
         "--api-key", os.getenv("BITFINEX_API_KEY", ""),
         "--api-secret", os.getenv("BITFINEX_API_SECRET", "")
@@ -316,7 +318,7 @@ def run_lending_automation(symbol="USD", total_amount=1000, min_order=150, rate_
         return f"Error: {e.stderr}"
 
 # 使用示例
-result = run_lending_automation("USD", 1000, 150, 0.00005)
+result = run_lending_automation("USD", 1000, 150, 50, 0.00005)
 print(result)
 ```
 

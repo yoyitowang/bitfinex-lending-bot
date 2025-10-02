@@ -1022,7 +1022,7 @@ class LendingOrder:
 class FundingLendingAutomation:
     """Automated funding lending system"""
 
-    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None, rate_interval: float = 0.00005):
+    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None, rate_interval: float = 0.000005):
         self.public_api = BitfinexAPI()
         self.auth_api = None
         if api_key and api_secret:
@@ -1401,7 +1401,7 @@ class FundingLendingAutomation:
 
     def generate_order_strategy(self, recommendation: LendingRecommendation,
                                total_amount: float, min_order: float,
-                               max_orders: int = 10, target_period: int = 2) -> List[LendingOrder]:
+                               max_orders: int = 50, target_period: int = 2) -> List[LendingOrder]:
         """
         Generate lending orders strategy based on market lowest offer rate
 
@@ -1619,7 +1619,7 @@ class FundingLendingAutomation:
         return failed_orders == 0
 
     def run_automation(self, symbol: str, total_amount: float, min_order: float,
-                      target_period: int = 30, confirm: bool = True) -> bool:
+                      max_orders: int = 50, target_period: int = 30, confirm: bool = True) -> bool:
         """
         Run the complete lending automation process
 
@@ -1635,7 +1635,7 @@ class FundingLendingAutomation:
 
             # Step 3: Generate order strategy
             orders = self.generate_order_strategy(
-                recommendation, total_amount, min_order,
+                recommendation, total_amount, min_order, max_orders,
                 target_period=target_period  # Pass the target period
             )
             self.display_order_strategy(orders, symbol)
@@ -1665,13 +1665,14 @@ class FundingLendingAutomation:
 @click.option('--symbol', default='USD', help='Funding currency symbol')
 @click.option('--total-amount', type=float, default=1000.0, help='Total amount to lend')
 @click.option('--min-order', type=float, default=150.0, help='Minimum order size')
+@click.option('--max-orders', type=int, default=50, help='Maximum number of orders to place (default 50)')
 @click.option('--max-rate-increment', type=float, default=0.0001, help='Maximum rate increment from base in decimal (0.0001 = 0.01%)')
-@click.option('--rate-interval', type=float, default=0.00005, help='Rate interval between orders in decimal (0.00005 = 0.005%)')
+@click.option('--rate-interval', type=float, default=0.000005, help='Rate interval between orders in decimal (0.000005 = 0.0005%)')
 @click.option('--target-period', type=int, default=2, help='Target lending period in days (2 = shortest term)')
 @click.option('--no-confirm', is_flag=True, help='Skip user confirmation (use with caution)')
 @click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
 @click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
-def funding_lend_automation(symbol, total_amount, min_order, max_rate_increment, rate_interval, target_period, no_confirm, api_key, api_secret):
+def funding_lend_automation(symbol, total_amount, min_order, max_orders, max_rate_increment, rate_interval, target_period, no_confirm, api_key, api_secret):
     """Automated funding lending strategy with market analysis and tiered orders"""
     try:
         if not api_key or not api_secret:
@@ -1694,6 +1695,7 @@ def funding_lend_automation(symbol, total_amount, min_order, max_rate_increment,
             symbol=symbol,
             total_amount=total_amount,
             min_order=min_order,
+            max_orders=max_orders,
             target_period=target_period,
             confirm=confirm
         )
