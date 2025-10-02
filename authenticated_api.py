@@ -40,7 +40,7 @@ class AuthenticatedBitfinexAPI:
             return None
 
     def get_funding_credits(self, symbol: Optional[str] = None) -> Optional[List]:
-        """Get user's funding credits (borrowed funds)"""
+        """Get user's funding credits (funds used in active positions - earning interest)"""
         try:
             credits = self.client.rest.auth.get_funding_credits(symbol=symbol)
             return credits
@@ -49,7 +49,7 @@ class AuthenticatedBitfinexAPI:
             return None
 
     def get_funding_loans(self, symbol: Optional[str] = None) -> Optional[List]:
-        """Get user's funding loans (lent out funds that are earning interest)"""
+        """Get user's funding loans (funds not used in active positions)"""
         try:
             loans = self.client.rest.auth.get_funding_loans(symbol=symbol)
             return loans

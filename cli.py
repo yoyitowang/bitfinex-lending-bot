@@ -541,7 +541,7 @@ def format_funding_portfolio(portfolio_data: Dict[str, Any]) -> str:
     wallet = portfolio_data.get('wallet_statistics', {})
     pending_lending = portfolio_data['pending_lending_statistics']
     active_lending = portfolio_data['active_lending_statistics']
-    borrowing = portfolio_data['borrowing_statistics']
+    unused_funds = portfolio_data.get('unused_funds_statistics', {})
     income = portfolio_data['income_analysis']
     risks = portfolio_data['risk_metrics']
     periods = portfolio_data['period_distribution']
@@ -554,14 +554,12 @@ def format_funding_portfolio(portfolio_data: Dict[str, Any]) -> str:
         # 投資組合總覽表格
         overview_table = Table(title="Portfolio Overview", show_header=True, header_style="bold magenta")
         overview_table.add_column("Metric", style="cyan", no_wrap=True)
-        overview_table.add_column("Pending Offers", style="blue", justify="right")
-        overview_table.add_column("Borrowed Funds", style="green", justify="right")
-        overview_table.add_column("Lent Funds", style="red", justify="right")
-        overview_table.add_column("Net Position", style="yellow", justify="right")
+        overview_table.add_column("Pending Lending", style="blue", justify="right")
+        overview_table.add_column("Active Lending", style="red", justify="right")
+        overview_table.add_column("Total Provided", style="yellow", justify="right")
 
         overview_table.add_row(
-            "Available for Lending",
-            "",
+            "Available Balance",
             "",
             "",
             f"${summary.get('available_for_lending', 0):,.2f}"
@@ -569,79 +567,76 @@ def format_funding_portfolio(portfolio_data: Dict[str, Any]) -> str:
         overview_table.add_row(
             "Total Amount",
             f"${summary['total_pending_lending_amount']:,.2f}",
-            f"${summary['total_borrowing_amount']:,.2f}",        # Active Borrows (borrowed money)
-            f"${summary['total_active_lending_amount']:,.2f}",  # Active Lends (lent out money)
-            f"${summary['net_exposure']:,.2f}"
+            f"${summary['total_active_lending_amount']:,.2f}",
+            f"${summary['total_lending_amount']:,.2f}"
         )
         overview_table.add_row(
             "Active Positions",
             str(summary['pending_offers_count']),
-            str(summary['borrowing_credits_count']),             # Active Borrows count
-            str(summary['active_lends_count']),                  # Active Lends count
-            ""
+            str(summary['active_lends_count']),
+            str(summary['pending_offers_count'] + summary['active_lends_count'])
         )
 
-        # 日利率和年利率 (根據用戶的理解調整顯示)
-        borrowing_daily_rate = borrowing['weighted_avg_rate']    # Active Borrows rate
-        borrowing_yearly_rate = borrowing_daily_rate * 365
-        active_daily_rate = active_lending['weighted_avg_rate']  # Active Lends rate
-        active_yearly_rate = active_daily_rate * 365
-        net_daily_rate = active_daily_rate - borrowing_daily_rate  # Lends - Borrows
-        net_yearly_rate = net_daily_rate * 365
+        # 日利率和年利率
+        pending_daily_rate = pending_lending['weighted_avg_rate']
+        active_daily_rate = active_lending['weighted_avg_rate']
+        total_daily_rate = (pending_daily_rate + active_daily_rate) / 2 if active_daily_rate > 0 else pending_daily_rate
 
         overview_table.add_row(
             "Avg Daily Rate",
-            "",
-            f"{borrowing_daily_rate*100:.4f}%",  # Active Borrows rate
-            f"{active_daily_rate*100:.4f}%",     # Active Lends rate
-            f"{net_daily_rate*100:.4f}%"
+            f"{pending_daily_rate*100:.4f}%",
+            f"{active_daily_rate*100:.4f}%",
+            f"{total_daily_rate*100:.4f}%"
         )
         overview_table.add_row(
             "Avg Yearly Rate",
-            "",
-            f"{borrowing_yearly_rate*100:.2f}%", # Active Borrows rate
-            f"{active_yearly_rate*100:.2f}%",    # Active Lends rate
-            f"{net_yearly_rate*100:.2f}%"
+            f"{pending_daily_rate*365*100:.2f}%",
+            f"{active_daily_rate*365*100:.2f}%",
+            f"{total_daily_rate*365*100:.2f}%"
         )
 
-        # 收益分析表格
-        income_table = Table(title="Income Analysis", show_header=True, header_style="bold green")
-        income_table.add_column("Period", style="cyan")
-        income_table.add_column("Borrowing Cost", style="green", justify="right")
-        income_table.add_column("Lending Income", style="red", justify="right")
-        income_table.add_column("Net", style="yellow", justify="right")
+        # 資產總覽表格 - 只顯示放貸相關
+        position_table = Table(title="Portfolio Positions", show_header=True, header_style="bold blue")
+        position_table.add_column("Position Type", style="cyan")
+        position_table.add_column("Amount", style="green", justify="right")
+        position_table.add_column("Count", style="white", justify="right")
 
-        # 根據調整後的術語，Active Borrows是借來的錢（成本），Active Lends是借出的錢（收益）
-        income_table.add_row("Daily", f"${income['estimated_daily_cost']:.2f}", f"${income['estimated_daily_income']:.2f}", f"${income['net_daily_income']:.2f}")
-        income_table.add_row("Yearly", f"${income['estimated_yearly_cost']:.2f}", f"${income['estimated_yearly_income']:.2f}", f"${income['net_yearly_income']:.2f}")
-        income_table.add_row("Margin", "", f"{(income['estimated_yearly_income']/summary['total_lending_amount']*100):.2f}%" if summary['total_lending_amount'] > 0 else "0%", f"{income['net_income_margin']:.2f}%")
+        position_table.add_row("Active Lending", f"${summary['total_active_lending_amount']:,.2f}", str(summary['active_lends_count']))
+        position_table.add_row("Pending Offers", f"${summary['total_pending_lending_amount']:,.2f}", str(summary['pending_offers_count']))
+        position_table.add_row("Unused Funds", f"${summary['total_unused_funds']:,.2f}", str(summary['unused_funds_count']))
+        position_table.add_row("Total Provided", f"${summary['total_lending_amount']:,.2f}", str(summary['pending_offers_count'] + summary['active_lends_count']))
+
+        # 收益分析表格 - 只顯示收益
+        income_table = Table(title="Income Analysis", show_header=True, header_style="bold green")
+        income_table.add_column("Metric", style="cyan")
+        income_table.add_column("Daily", style="yellow", justify="right")
+        income_table.add_column("Yearly", style="yellow", justify="right")
+
+        income_table.add_row("Lending Income", f"${income['estimated_daily_income']:.2f}", f"${income['estimated_yearly_income']:.2f}")
+        income_table.add_row("Income Margin", "", f"{income['net_income_margin']:.2f}%")
 
         # 期間分佈表格
         period_table = Table(title="Period Distribution", show_header=True, header_style="bold blue")
         period_table.add_column("Period", style="cyan")
         period_table.add_column("Pending Offers", style="blue", justify="right")
-        period_table.add_column("Borrowed Funds", style="green", justify="right")
-        period_table.add_column("Lent Funds", style="red", justify="right")
+        period_table.add_column("Active Lending", style="red", justify="right")
 
-        all_periods = set(periods['pending_periods'].keys()) | set(periods['active_periods'].keys()) | set(periods['borrowing_periods'].keys())
+        all_periods = set(periods['pending_periods'].keys()) | set(periods['active_periods'].keys())
         for period in sorted(all_periods):
             pending_count = periods['pending_periods'].get(period, 0)
-            borrowing_count = periods['borrowing_periods'].get(period, 0)  # Active Borrows
-            active_count = periods['active_periods'].get(period, 0)       # Active Lends
-            period_table.add_row(period, str(pending_count), str(borrowing_count), str(active_count))
+            active_count = periods['active_periods'].get(period, 0)
+            period_table.add_row(period, str(pending_count), str(active_count))
 
         # 風險指標
         risk_text = Text()
         risk_text.append("Risk Metrics:\n", style="bold red")
-        risk_text.append(f"• Leverage Ratio: {risks['leverage_ratio']:.2f}\n", style="yellow")
-        risk_text.append(f"• Rate Spread: {risks['rate_spread']*100:.4f}%\n", style="green")
         risk_text.append(f"• Concentration Risk: {risks['concentration_risk']:.2f}\n", style="red")
         risk_text.append(f"• Duration Risk: {risks['duration_risk']:.2f}\n", style="blue")
         risk_text.append(f"• Liquidity Ratio: {risks['liquidity_ratio']:.2f}\n", style="cyan")
 
-        # 貨幣分佈 (使用active lending，因為這才是實際收益來源)
+        # 貨幣分佈
         if active_lending['symbol_distribution']:
-            currency_text = Text("Currency Distribution (Active Lending):\n", style="bold magenta")
+            currency_text = Text("Currency Distribution:\n", style="bold magenta")
             total_lending = sum(active_lending['symbol_distribution'].values())
             for symbol, amount in active_lending['symbol_distribution'].items():
                 percentage = (amount / total_lending * 100) if total_lending > 0 else 0
@@ -649,6 +644,8 @@ def format_funding_portfolio(portfolio_data: Dict[str, Any]) -> str:
 
             with console.capture() as capture:
                 console.print(Panel(overview_table, title="Portfolio Overview"))
+                console.print()
+                console.print(Panel(position_table, title="Portfolio Positions"))
                 console.print()
                 console.print(Panel(income_table, title="Income Analysis"))
                 console.print()
@@ -658,6 +655,8 @@ def format_funding_portfolio(portfolio_data: Dict[str, Any]) -> str:
         else:
             with console.capture() as capture:
                 console.print(Panel(overview_table, title="Portfolio Overview"))
+                console.print()
+                console.print(Panel(position_table, title="Portfolio Positions"))
                 console.print()
                 console.print(Panel(income_table, title="Income Analysis"))
                 console.print()
@@ -673,36 +672,33 @@ def format_funding_portfolio(portfolio_data: Dict[str, Any]) -> str:
 
         # 總覽
         output += "PORTFOLIO OVERVIEW:\n"
-        output += f"Available for Lending:     ${summary.get('available_for_lending', 0):,.2f}\n"
+        output += f"Available Balance:        ${summary.get('available_for_lending', 0):,.2f}\n"
         output += f"Pending Lending Amount:   ${summary['total_pending_lending_amount']:,.2f}\n"
         output += f"Active Lending Amount:    ${summary['total_active_lending_amount']:,.2f}\n"
         output += f"Total Lending Amount:     ${summary['total_lending_amount']:,.2f}\n"
-        output += f"Total Borrowing Amount:   ${summary['total_borrowing_amount']:,.2f}\n"
-        output += f"Net Exposure:            ${summary['net_exposure']:,.2f}\n"
-        output += f"Pending Offers:          {summary['pending_offers_count']}\n"
-        output += f"Active Lends:            {summary['active_lends_count']}\n"
-        output += f"Borrowing Credits:       {summary['borrowing_credits_count']}\n"
+        output += f"Pending Lending Orders:  {summary['pending_offers_count']}\n"
+        output += f"Active Lending Positions: {summary['active_lends_count']}\n"
 
-        # 日利率和年利率 (根據調整後的術語顯示)
-        borrowing_daily_rate = borrowing['weighted_avg_rate']      # Active Borrows rate
-        borrowing_yearly_rate = borrowing_daily_rate * 365
-        active_daily_rate = active_lending['weighted_avg_rate']    # Active Lends rate
-        active_yearly_rate = active_daily_rate * 365
-        net_daily_rate = active_daily_rate - borrowing_daily_rate   # Lends - Borrows
-        net_yearly_rate = net_daily_rate * 365
+        # 日利率和年利率
+        pending_daily_rate = pending_lending['weighted_avg_rate']
+        active_daily_rate = active_lending['weighted_avg_rate']
+        total_daily_rate = (pending_daily_rate + active_daily_rate) / 2 if active_daily_rate > 0 else pending_daily_rate
 
-        output += f"Avg Daily Rate (AB/AL/N): {borrowing_daily_rate*100:.4f}% / {active_daily_rate*100:.4f}% / {net_daily_rate*100:.4f}%\n"
-        output += f"Avg Yearly Rate (AB/AL/N): {borrowing_yearly_rate*100:.2f}% / {active_yearly_rate*100:.2f}% / {net_yearly_rate*100:.2f}%\n\n"
+        output += f"Avg Daily Rate (P/A/T): {pending_daily_rate*100:.4f}% / {active_daily_rate*100:.4f}% / {total_daily_rate*100:.4f}%\n"
+        output += f"Avg Yearly Rate (P/A/T): {pending_daily_rate*365*100:.2f}% / {active_daily_rate*365*100:.2f}% / {total_daily_rate*365*100:.2f}%\n\n"
+
+        # 資產總覽
+        output += "PORTFOLIO POSITIONS:\n"
+        output += f"Active Lending:          ${summary['total_active_lending_amount']:,.2f} ({summary['active_lends_count']} positions)\n"
+        output += f"Pending Offers:          ${summary['total_pending_lending_amount']:,.2f} ({summary['pending_offers_count']} positions)\n"
+        output += f"Unused Funds:            ${summary['total_unused_funds']:,.2f} ({summary['unused_funds_count']} positions)\n"
+        output += f"Total Provided:          ${summary['total_lending_amount']:,.2f} ({summary['pending_offers_count'] + summary['active_lends_count']} positions)\n\n"
 
         # 收益分析
         output += "INCOME ANALYSIS:\n"
-        output += f"Daily Borrowing Cost:    ${income['estimated_daily_cost']:.2f}\n"
         output += f"Daily Lending Income:    ${income['estimated_daily_income']:.2f}\n"
-        output += f"Net Daily Income:        ${income['net_daily_income']:.2f}\n"
-        output += f"Yearly Borrowing Cost:   ${income['estimated_yearly_cost']:.2f}\n"
         output += f"Yearly Lending Income:   ${income['estimated_yearly_income']:.2f}\n"
-        output += f"Net Yearly Income:       ${income['net_yearly_income']:.2f}\n"
-        output += f"Net Income Margin:       {income['net_income_margin']:.2f}%\n\n"
+        output += f"Income Margin:           {income['net_income_margin']:.2f}%\n\n"
 
         # 掛單放貸統計
         output += "PENDING LENDING STATISTICS:\n"
@@ -718,16 +714,14 @@ def format_funding_portfolio(portfolio_data: Dict[str, Any]) -> str:
         output += f"Weighted Avg Rate:      {active_lending['weighted_avg_rate']*100:.4f}%\n"
         output += f"Rate Range:             {active_lending['rate_range']['min']*100:.4f}% - {active_lending['rate_range']['max']*100:.4f}%\n\n"
 
-        # 借款統計
-        output += "ACTIVE BORROWING STATISTICS:\n"
-        output += f"Total Amount:           ${borrowing['total_amount']:,.2f}\n"
-        output += f"Average Rate:           {borrowing['avg_rate']*100:.4f}%\n"
-        output += f"Weighted Avg Rate:      {borrowing['weighted_avg_rate']*100:.4f}%\n\n"
+        # 未使用資金統計
+        output += "UNUSED FUNDS STATISTICS:\n"
+        output += f"Total Amount:           ${unused_funds.get('total_amount', 0):,.2f}\n"
+        output += f"Average Rate:           {unused_funds.get('avg_rate', 0)*100:.4f}%\n"
+        output += f"Weighted Avg Rate:      {unused_funds.get('weighted_avg_rate', 0)*100:.4f}%\n\n"
 
         # 風險指標
         output += "RISK METRICS:\n"
-        output += f"Leverage Ratio:        {risks['leverage_ratio']:.2f}\n"
-        output += f"Rate Spread:           {risks['rate_spread']*100:.4f}%\n"
         output += f"Concentration Risk:    {risks['concentration_risk']:.2f}\n"
         output += f"Duration Risk:         {risks['duration_risk']:.2f}\n"
         output += f"Liquidity Ratio:       {risks['liquidity_ratio']:.2f}\n\n"
@@ -737,10 +731,7 @@ def format_funding_portfolio(portfolio_data: Dict[str, Any]) -> str:
         output += "Pending Offers:\n"
         for period, count in periods['pending_periods'].items():
             output += f"  {period}: {count} positions\n"
-        output += "Borrowed Funds:\n"
-        for period, count in periods['borrowing_periods'].items():
-            output += f"  {period}: {count} positions\n"
-        output += "Lent Funds:\n"
+        output += "Active Lending:\n"
         for period, count in periods['active_periods'].items():
             output += f"  {period}: {count} positions\n"
 
@@ -1622,7 +1613,7 @@ class FundingLendingAutomation:
         self.console.print(rec_table)
         self.console.print(f"[dim]{recommendation.reasoning}[/dim]")
 
-    def display_order_strategy(self, orders: List[LendingOrder], symbol: str) -> None:
+    def display_order_strategy(self, orders: List[LendingOrder], symbol: str, available_balance: Optional[float] = None, pending_total: Optional[float] = None) -> None:
         """Display order placement strategy"""
         if not orders:
             self.console.print("[red]No orders to display[/red]")
@@ -1649,7 +1640,28 @@ class FundingLendingAutomation:
             total_amount += order.amount
 
         self.console.print(strategy_table)
-        self.console.print(f"[bold]Total Amount: ${total_amount:,.2f}[/bold]")
+
+        # Display total amount and balance information
+        balance_info = ""
+        if available_balance is not None:
+            balance_info = f" | Wallet Balance: ${available_balance:,.2f}"
+            if total_amount > available_balance:
+                balance_info += " [red](EXCEEDS BALANCE)[/red]"
+            elif total_amount == available_balance:
+                balance_info += " [yellow](USES ALL BALANCE)[/yellow]"
+            else:
+                balance_info += " [green](WITHIN BALANCE)[/green]"
+
+            # Add pending offers information if available
+            if pending_total is not None and pending_total > 0:
+                total_if_cancel = available_balance + pending_total
+                balance_info += f" | Pending Offers: ${pending_total:,.2f} (Total if cancelled: ${total_if_cancel:,.2f})"
+                if total_amount > total_if_cancel:
+                    balance_info += " [red](EXCEEDS EVEN WITH CANCELLATION)[/red]"
+                else:
+                    balance_info += " [cyan](AVAILABLE WITH CANCELLATION)[/cyan]"
+
+        self.console.print(f"[bold]Total Amount: ${total_amount:,.2f}{balance_info}[/bold]")
 
     def submit_single_order(self, order_info: Dict[str, Any], rate_limiter: RateLimiter, max_retries: int = 3) -> Dict[str, Any]:
         """Submit a single order with rate limiting and retry logic"""
@@ -1833,6 +1845,22 @@ class FundingLendingAutomation:
             self.console.print(f"[yellow]Warning: Could not retrieve wallet balance: {str(e)}[/yellow]")
             return None
 
+    def _get_pending_offers_total(self, symbol: str) -> Optional[float]:
+        """Get total amount locked in pending funding offers for the symbol"""
+        try:
+            offers = self.auth_api.get_funding_offers(symbol)
+            if offers:
+                total_pending = 0.0
+                for offer in offers:
+                    # Assuming offer has amount attribute, or we need to access it properly
+                    amount = getattr(offer, 'amount', 0)
+                    total_pending += float(amount)
+                return total_pending
+            return 0.0  # No pending offers
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Could not retrieve pending offers: {str(e)}[/yellow]")
+            return None
+
     def run_automation(self, symbol: str, total_amount: float, min_order: float,
                       max_orders: int = 50, target_period: int = 30, confirm: bool = True,
                       cancel_existing: bool = False) -> bool:
@@ -1842,21 +1870,30 @@ class FundingLendingAutomation:
         Returns True if successful
         """
         try:
-            # Check wallet balance first
-            self.console.print(f"\n[bold cyan]💰 Checking Wallet Balance for f{symbol}[/bold cyan]")
+            # Check wallet balance and pending offers
+            self.console.print(f"\n[bold cyan]💰 Checking Account Balances for f{symbol}[/bold cyan]")
             wallet_balance = self._get_funding_wallet_balance(symbol)
+            pending_total = self._get_pending_offers_total(symbol)
 
             if wallet_balance is not None:
-                self.console.print(f"Available balance for f{symbol}: ${wallet_balance:,.2f}")
+                self.console.print(f"Wallet available balance for f{symbol}: ${wallet_balance:,.2f}")
 
+                if pending_total is not None and pending_total > 0:
+                    self.console.print(f"Pending lending offers total: ${pending_total:,.2f}")
+                    total_available_if_cancel = wallet_balance + pending_total
+                    self.console.print(f"Total available if cancelling pending offers: ${total_available_if_cancel:,.2f}")
+                elif pending_total == 0:
+                    self.console.print(f"Pending lending offers total: $0.00")
+
+                # Use wallet balance for lending amount validation
                 if total_amount > wallet_balance:
                     old_amount = total_amount
                     total_amount = wallet_balance
-                    self.console.print(f"[yellow]⚠️  Requested amount (${old_amount:,.2f}) exceeds available balance[/yellow]")
-                    self.console.print(f"[green]✅ Adjusted lending amount to available balance: ${total_amount:,.2f}[/green]")
+                    self.console.print(f"[yellow]⚠️  Requested amount (${old_amount:,.2f}) exceeds wallet balance[/yellow]")
+                    self.console.print(f"[green]✅ Adjusted lending amount to wallet balance: ${total_amount:,.2f}[/green]")
 
                     if total_amount < min_order:
-                        self.console.print(f"[red]❌ Available balance (${total_amount:,.2f}) is less than minimum order size (${min_order:,.2f})[/red]")
+                        self.console.print(f"[red]❌ Wallet balance (${total_amount:,.2f}) is less than minimum order size (${min_order:,.2f})[/red]")
                         return False
             else:
                 self.console.print(f"[yellow]⚠️  Could not retrieve wallet balance, proceeding with requested amount[/yellow]")
@@ -1873,7 +1910,7 @@ class FundingLendingAutomation:
                 recommendation, total_amount, min_order, max_orders,
                 target_period=target_period  # Pass the target period
             )
-            self.display_order_strategy(orders, symbol)
+            self.display_order_strategy(orders, symbol, wallet_balance, pending_total)
 
             if not orders:
                 self.console.print("[red]No valid orders generated[/red]")

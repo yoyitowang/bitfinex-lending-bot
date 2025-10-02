@@ -1,6 +1,10 @@
 # Bitfinex Funding/Lending API Scripts
 
-一個完整的Bitfinex funding (借貸) 市場分析和自動化借貸工具。
+一個完整的Bitfinex funding (放貸) 市場分析和自動化放貸工具。
+
+**版本**: 2.0.0
+**最後更新**: 2025-10-02
+**Python 版本**: 3.7+
 
 ## 📖 **快速參考表**
 
@@ -11,14 +15,14 @@
 | `funding-trades` | 交易歷史 | ❌ | `cli.py funding-trades --symbol USD --limit 50` |
 | `wallets` | 錢包餘額 | ✅ | `cli.py wallets` |
 | `funding-offers` | 掛單放貸 | ✅ | `cli.py funding-offers` |
-| `funding-active-lends` | 已借出資金 | ✅ | `cli.py funding-active-lends` |
-| `funding-credits` | 活躍借款 | ✅ | `cli.py funding-credits` |
-| `funding-offer` | 提交借貸單 | ✅ | `cli.py funding-offer --symbol fUSD --amount 100 --rate 0.00015 --period 30` |
+| `funding-active-lends` | 活躍放貸部位 | ✅ | `cli.py funding-active-lends` |
+| `funding-credits` | 活躍放貸部位 | ✅ | `cli.py funding-credits` |
+| `funding-offer` | 提交放貸單 | ✅ | `cli.py funding-offer --symbol fUSD --amount 100 --rate 0.00015 --period 30` |
 | `cancel-funding-offer` | 取消單筆放貸訂單 | ✅ | `cli.py cancel-funding-offer --offer-id 12345` |
 | `cancel-all-funding-offers` | 取消所有放貸訂單 | ✅ | `cli.py cancel-all-funding-offers --symbol fUSD` |
-| `funding-market-analysis` | 綜合分析 | ❌ | `cli.py funding-market-analysis --symbol USD` |
-| `funding-portfolio` | 投資組合分析 | ✅ | `cli.py funding-portfolio` |
-| `auto-lending-check` | 自動借貸檢查 | ❌ | `cli.py auto-lending-check --symbol USD --period 2d` |
+| `funding-market-analysis` | 綜合市場分析 | ❌ | `cli.py funding-market-analysis --symbol USD` |
+| `funding-portfolio` | 放貸投資組合分析 | ✅ | `cli.py funding-portfolio` |
+| `auto-lending-check` | 自動放貸檢查 | ❌ | `cli.py auto-lending-check --symbol USD --period 2d` |
 | `funding-lend-automation` | 自動放貸策略 | ✅ | `cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-order 150` |
 
 ## 🚀 主要功能
@@ -137,34 +141,41 @@ python cli.py funding-offers --symbol fUSD
 - `--symbol`: 可選，指定貨幣符號
 **需求**: API金鑰設定
 
-#### 6. 查看已借出的Funding資金
+#### 6. 查看活躍放貸部位
 ```bash
 python cli.py funding-active-lends --symbol fUSD
 ```
-**功能**: 顯示用戶已借出並正在賺取利息的資金（日利率/年利率）
+**功能**: 顯示用戶當前活躍的funding放貸部位（正在賺取利息的資金，日利率/年利率）
+**API來源**: `get_funding_credits`
 **參數**:
 - `--symbol`: 可選，指定貨幣符號
 **需求**: API金鑰設定
 
-#### 7. 查看活躍的Funding貸款
+#### 7. 查看活躍放貸部位 (別名)
 ```bash
 python cli.py funding-credits --symbol fUSD
 ```
-**功能**: 顯示用戶當前活躍的funding貸款記錄
+**功能**: 顯示用戶當前活躍的funding放貸部位（與funding-active-lends相同）
+**API來源**: `get_funding_credits`
 **參數**:
 - `--symbol`: 可選，指定貨幣符號
 **需求**: API金鑰設定
 
-#### 8. 查看投資組合分析
+#### 8. 查看放貸投資組合分析
 ```bash
 python cli.py funding-portfolio
 ```
-**功能**: 顯示完整的funding投資組合統計分析，區分掛單放貸和已借出資金
+**功能**: 顯示完整的funding放貸投資組合統計分析，包含活躍部位、掛單和未使用資金
 **輸出**:
-- 投資組合總覽 (可用資金、掛單放貸、已借出資金、借款、日利率/年利率)
-- 收益分析 (只從已借出資金計算每日/年收益和利潤率)
-- 期間分佈 (不同貸款期間的統計)
-- 風險分析 (槓桿比率、利率差、集中度風險等)
+- **Portfolio Overview**: 總覽可用資金、掛單放貸、活躍放貸、總提供金額和利率統計
+- **Portfolio Positions**: 活躍放貸部位、掛單金額、未使用資金、總提供金額的詳細統計
+- **Income Analysis**: 活躍放貸收益和收益率分析
+- **Period Distribution**: 不同貸款期間的統計分佈
+- **Risk Analysis**: 集中度風險、期間風險、流動性比率等風險指標
+**API數據來源**:
+- `get_funding_offers`: 掛單中的放貸訂單
+- `get_funding_credits`: 活躍放貸部位（正在賺取利息）
+- `get_funding_loans`: 未使用的資金
 **需求**: API金鑰設定
 
 #### 9. 提交Funding借貸訂單
@@ -290,14 +301,17 @@ from authenticated_api import AuthenticatedBitfinexAPI
 # 需要API金鑰
 auth_api = AuthenticatedBitfinexAPI()
 wallets = auth_api.get_wallets()
-offers = auth_api.get_funding_offers()
-credits = auth_api.get_funding_credits()
+offers = auth_api.get_funding_offers()          # 掛單中的放貸訂單
+credits = auth_api.get_funding_credits()        # 活躍放貸部位（正在賺利息）
+loans = auth_api.get_funding_loans()            # 未使用的資金
+
+# 提交放貸訂單
 auth_api.post_funding_offer("fUSD", 100, 0.00015, 30)
 
 # 取消訂單
-auth_api.cancel_funding_offer(12345)  # 取消單筆訂單
-auth_api.cancel_all_funding_offers("fUSD")  # 取消所有 fUSD 訂單
-auth_api.cancel_all_funding_offers()  # 取消所有訂單
+auth_api.cancel_funding_offer(12345)            # 取消單筆訂單
+auth_api.cancel_all_funding_offers("fUSD")      # 取消所有 fUSD 訂單
+auth_api.cancel_all_funding_offers()            # 取消所有訂單
 ```
 
 #### 市場分析器使用
@@ -306,16 +320,25 @@ from funding_market_analyzer import FundingMarketAnalyzer
 
 analyzer = FundingMarketAnalyzer()
 
-# 獲取分析結果
+# 獲取市場分析結果
 analysis = analyzer.get_strategy_recommendations("USD")
 
-# 分析funding投資組合
+# 分析funding放貸投資組合
 portfolio_stats = analyzer.analyze_lending_portfolio(api_key, api_secret)
 
-# 包含錢包餘額、放貸/借款統計、收益分析、風險指標等完整資訊
-# portfolio_stats['summary']['available_for_lending'] - 可用的借貸資金
+# 返回完整的投資組合統計數據
+# 數據來源：
+# - get_funding_offers: 掛單中的放貸訂單
+# - get_funding_credits: 活躍放貸部位（正在賺利息）
+# - get_funding_loans: 未使用的資金
+
+# 主要數據字段：
+# portfolio_stats['summary']['available_for_lending'] - 可用放貸資金
 # portfolio_stats['summary']['total_lending_amount'] - 總放貸金額
-# portfolio_stats['income_analysis']['net_yearly_income'] - 年淨收益
+# portfolio_stats['summary']['total_active_lending_amount'] - 活躍放貸金額
+# portfolio_stats['summary']['total_unused_funds'] - 未使用資金
+# portfolio_stats['income_analysis']['estimated_daily_income'] - 日收益
+# portfolio_stats['income_analysis']['estimated_yearly_income'] - 年收益
 
 # 程式化訪問
 auto_data = analyzer.get_analysis_for_auto_lending("USD")
@@ -424,6 +447,28 @@ A: 檢查風險評估條件，可能需要調整信心度門檻或市場條件�
 ```
 [ID, TIMESTAMP, AMOUNT, RATE, PERIOD]
 ```
+
+## 📝 **變更日誌**
+
+### v2.0.0 (2025-10-02)
+- 🆕 **專注放貸功能**: 完全移除借款相關功能，只保留放貸分析和操作
+- 🔧 **API修正**: 正確使用Bitfinex API
+  - `get_funding_credits`: 用於活躍放貸部位（正在賺利息）
+  - `get_funding_loans`: 用於未使用的資金
+  - `get_funding_offers`: 用於掛單中的放貸訂單
+- 📊 **投資組合分析改進**:
+  - 顯示活躍放貸部位、掛單和未使用資金
+  - 準確的收益計算只基於活躍放貸部位
+  - 移除借款成本和淨收益計算
+- 🚀 **新增功能**:
+  - 未使用資金統計顯示
+  - 改進的風險指標（集中度、期間風險、流動性）
+- 📚 **文檔更新**: 完整的API說明和使用指南更新
+
+### v1.0.0 (初始版本)
+- 基本的Bitfinex API整合
+- 市場數據獲取功能
+- 簡單的投資組合分析
 
 ## ⚖️ **免責聲明**
 
