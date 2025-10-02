@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  bitfinex-lending-bot:
+    build: .
+    container_name: bitfinex-lending-bot
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+      - ./.env:/app/.env:ro
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Taipei
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command: >
+      sh -c "
+        # Create log directory
+        mkdir -p /app/logs
+
+        # Setup cron job if enabled
+        if [ \"\${AUTO_LENDING_ENABLED:-true}\" = 'true' ]; then
+          echo \"Setting up cron job with schedule: \${AUTO_LENDING_CRON_SCHEDULE:-*/10 * * * *}\"
+
+          # Create cron job
+          echo \"\${AUTO_LENDING_CRON_SCHEDULE:-*/10 * * * *} /app/run_auto_lending.sh\" > /etc/cron.d/auto-lending
+
+          # Set proper permissions
+          chmod 0644 /etc/cron.d/auto-lending
+          crontab /etc/cron.d/auto-lending
+
+          # Start cron daemon
+          cron
+
+          echo 'Auto lending cron job configured. Logs will be available at /app/logs/auto_lending.log'
+          echo 'Container will run indefinitely to keep cron active...'
+          tail -f /app/logs/auto_lending.log
+        else
+          echo 'Auto lending is disabled. Running in manual mode...'
+          echo 'Use docker-compose exec bitfinex-lending-bot bash to access the container'
+          sleep infinity
+        fi
+      "
+
+  # Optional: Redis for caching (if needed in future)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: bitfinex-redis
+  #   restart: unless-stopped
+  #   volumes:
+  #     - redis_data:/data
+  #   command: redis-server --appendonly yes
+
+# volumes:
+#   redis_data:

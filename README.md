@@ -2,9 +2,10 @@
 
 一個完整的Bitfinex funding (放貸) 市場分析和自動化放貸工具。
 
-**版本**: 2.1.0
+**版本**: 2.2.0
 **最後更新**: 2025-10-02
 **Python 版本**: 3.7+
+**Docker 支援**: ✅
 
 ## 📖 **快速參考表**
 
@@ -23,7 +24,8 @@
 | `funding-market-analysis` | 綜合市場分析 | ❌ | `cli.py funding-market-analysis --symbol USD` |
 | `funding-portfolio` | 放貸投資組合分析 | ✅ | `cli.py funding-portfolio` |
 | `auto-lending-check` | 自動放貸檢查 | ❌ | `cli.py auto-lending-check --symbol USD --period 2d` |
-| `funding-lend-automation` | 自動放貸策略 | ✅ | `cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-order 150` *(預設串行處理)* |
+| `funding-lend-automation` | 自動放貸策略 | ✅ | `cli.py funding-lend-automation --symbol USD --total-amount 1000 --min-order 150 --no-confirm` *(支援自動化)* |
+| 🚀 **Docker 自動化** | 定時自動放貸款 | ✅ | `docker-compose up -d` *(每10分鐘自動執行)* |
 
 ## 🚀 主要功能
 
@@ -52,7 +54,29 @@
 
 ## 📦 安裝指南
 
-### 1. 下載和安裝
+### 選項 1: Docker 部署（推薦用於自動化）
+
+```bash
+# 下載項目文件
+git clone <repository-url>
+cd bitfinex-scripts
+
+# 複製環境配置
+cp .env.example .env
+# 編輯 .env 文件填入你的 API 認證和自動化設定
+
+# 啟動 Docker 容器（包含 cron job 自動化）
+docker-compose up -d
+```
+
+**Docker 優勢**:
+- 🚀 內建 cron job，每10分鐘自動執行放貸款
+- 🔒 隔離環境，更安全
+- 📊 自動日誌管理
+- ⚡ 輕鬆部署和維護
+
+### 選項 2: 本機安裝（用於開發/手動操作）
+
 ```bash
 # 下載項目文件
 git clone <repository-url>
@@ -458,6 +482,25 @@ A: 這是API nonce管理的常見問題。解決方案：
 ```
 
 ## 📝 **變更日誌**
+
+### v2.2.0 (2025-10-02)
+- 🐳 **Docker 容器化支援**: 完整的 Docker 和 Docker Compose 設定
+  - Dockerfile 基於 Python 3.9 slim 映像
+  - 內建 cron job 支援定時自動執行
+  - 環境變數驅動的配置系統
+  - 自動日誌管理和卷掛載
+- 🤖 **自動化腳本**: 完整的自動放貸款解決方案
+  - `run_auto_lending.sh`: 環境變數驅動的執行腳本
+  - `manual_run.sh`: 本機手動執行腳本
+  - 完整的錯誤處理和日誌記錄
+- ⚙️ **環境配置系統**: 擴展的 .env 配置選項
+  - 所有自動化參數都可在 .env 中設定
+  - 支持多種貨幣和靈活的定時排程
+  - 安全性設定和除錯選項
+- 📚 **完整文檔**: 新增詳細的 Docker 使用指南
+  - DOCKER_README.md 專門說明容器化部署
+  - 故障排除指南和進階設定
+  - 監控和維護命令
 
 ### v2.1.0 (2025-10-02)
 - 🐛 **修復平行處理 nonce 衝突**: 解決平行訂單提交時的 nonce 錯誤問題
