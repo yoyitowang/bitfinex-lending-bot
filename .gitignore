@@ -136,4 +136,6 @@ funding_analysis_cache/
 *.temp
 .cache/
 
+# Application specific files
 .roo/
+.specify
