@@ -2,7 +2,7 @@
 
 An automated lending bot for the Bitfinex funding market with comprehensive market analysis and strategy optimization.
 
-**Version**: 2.2.2
+**Version**: 2.2.3
 **Python**: 3.7+
 **Docker**: ✅ Supported
 

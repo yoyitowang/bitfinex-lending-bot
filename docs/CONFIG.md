@@ -70,6 +70,10 @@ AUTO_LENDING_MAX_WORKERS=3
 # Allow orders smaller than minimum order size (always enforces 150 minimum)
 AUTO_LENDING_ALLOW_SMALL_ORDERS=false
 
+# Dynamic amount increment factor (0.0-1.0)
+# Orders increase by factor * order_index (0.1 = 10% increase per order)
+AUTO_LENDING_AMOUNT_INCREMENT_FACTOR=0.0
+
 # Skip user confirmation (required for automation)
 AUTO_LENDING_NO_CONFIRM=true
 ```
@@ -91,6 +95,35 @@ AUTO_LENDING_ALLOW_SMALL_ORDERS=true
 - **When `false`**: Orders must be ≥ `AUTO_LENDING_MIN_ORDER` (default: 150)
 - **When `true`**: Orders can be ≥ 150 but smaller than `AUTO_LENDING_MIN_ORDER`
 - **Always enforced**: Bitfinex platform minimum of 150 units
+
+### Dynamic Amount Increment Factor
+
+The `AUTO_LENDING_AMOUNT_INCREMENT_FACTOR` setting enables progressive order sizing:
+
+```bash
+# Enable 10% increment per order (orders get progressively larger)
+AUTO_LENDING_AMOUNT_INCREMENT_FACTOR=0.1
+
+# Disable feature (traditional equal-sized orders)
+AUTO_LENDING_AMOUNT_INCREMENT_FACTOR=0.0
+```
+
+**Formula**: `adjusted_amount = base_amount × (1 + factor × order_index)`
+
+**Example with factor=0.1 and base_amount=$1,000**:
+- Order 1: $1,000 × (1 + 0.1 × 0) = **$1,000**
+- Order 2: $1,000 × (1 + 0.1 × 1) = **$1,100**
+- Order 3: $1,000 × (1 + 0.1 × 2) = **$1,200**
+
+**Use Cases**:
+- **Conservative Scaling**: 0.05-0.1 for gradual fund distribution
+- **Aggressive Scaling**: 0.2-0.5 for rapid position building
+- **Fixed Amounts**: 0.0 for traditional equal-sized orders
+
+**Behavior**:
+- **Range**: 0.0 to 1.0 (0% to 100% increment per order)
+- **Validation**: Each adjusted amount checked against available balance
+- **Compatibility**: Works with all other lending parameters
 
 # Execution interval in seconds (600 = 10 minutes)
 AUTO_LENDING_INTERVAL=600
@@ -186,6 +219,7 @@ AUTO_LENDING_INTERVAL=1800
 | `AUTO_LENDING_PARALLEL` | `false` | Use parallel processing |
 | `AUTO_LENDING_MAX_WORKERS` | `3` | Max parallel workers |
 | `AUTO_LENDING_ALLOW_SMALL_ORDERS` | `false` | Allow orders smaller than min size |
+| `AUTO_LENDING_AMOUNT_INCREMENT_FACTOR` | `0.0` | Dynamic amount increment factor (0-1) |
 | `AUTO_LENDING_NO_CONFIRM` | `true` | Skip confirmation prompts |
 | `AUTO_LENDING_INTERVAL` | `600` | Execution interval in seconds |
 

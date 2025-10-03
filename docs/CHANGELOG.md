@@ -5,7 +5,38 @@ All notable changes to the Bitfinex Funding/Lending API Scripts will be document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.2.2] - 2025-10-02
+## [2.2.3] - 2025-10-03
+
+### Added
+- **Dynamic Amount Increment Factor**: New `--amount-increment-factor` parameter for progressive order sizing
+  - Orders increase in size based on configurable factor (0-1)
+  - Formula: `adjusted_amount = base_amount * (1 + factor * order_index)`
+  - Example: factor=0.1 creates orders of 1000, 1100, 1200, 1300...
+  - Enables more sophisticated lending strategies and better fund distribution
+
+### Fixed
+- **Critical Variable Scope Bug**: Fixed `final_effective_balance` NameError in CLI automation
+  - Previously: `name 'final_effective_balance' is not defined` when using `--total-amount 0`
+  - Root cause: Variable calculated in `run_automation()` but referenced in CLI function
+  - Solution: Properly initialize and pass `final_effective_balance` in CLI function
+  - Impact: Enables "use all available balance" feature to work correctly
+
+- **Balance Calculation Logic**: Corrected effective balance initialization
+  - Ensures `final_effective_balance` is set when total_amount=0 with cancel_existing
+  - Prevents undefined variable errors in automation workflows
+  - Maintains proper balance validation throughout the lending process
+
+### Changed
+- **Documentation Updates**: Comprehensive documentation refresh
+  - Updated parameter descriptions and examples
+  - Added new feature documentation for amount increment factor
+  - Improved code comments and docstrings
+  - Enhanced troubleshooting section
+
+### Technical
+- **CLI Parameter Validation**: Enhanced input validation for new parameters
+- **Variable Scope Management**: Improved variable initialization patterns
+- **Error Prevention**: Better handling of edge cases in balance calculations
 
 ### Added
 - **Enhanced Order Cancellation**: New bulk cancellation capabilities
@@ -195,6 +226,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version History Summary
 
+- **2.2.3** (2025-10-03): Dynamic amount increment factor feature, critical balance calculation bug fix, comprehensive documentation updates
 - **2.2.2** (2025-10-02): Enhanced order cancellation, fixed order distribution, allow small orders feature, and improved rate limits
 - **2.2.1** (2025-10-02): Docker permission fixes and stability improvements
 - **2.2.0** (2025-10-02): Complete Docker containerization and automation framework

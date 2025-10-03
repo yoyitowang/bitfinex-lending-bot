@@ -46,6 +46,7 @@ CMD_ARGS=(
 [ -n "${AUTO_LENDING_MAX_ORDERS}" ] && CMD_ARGS+=("--max-orders" "${AUTO_LENDING_MAX_ORDERS}")
 [ -n "${AUTO_LENDING_RATE_INTERVAL}" ] && CMD_ARGS+=("--rate-interval" "${AUTO_LENDING_RATE_INTERVAL}")
 [ -n "${AUTO_LENDING_TARGET_PERIOD}" ] && CMD_ARGS+=("--target-period" "${AUTO_LENDING_TARGET_PERIOD}")
+[ -n "${AUTO_LENDING_AMOUNT_INCREMENT_FACTOR}" ] && CMD_ARGS+=("--amount-increment-factor" "${AUTO_LENDING_AMOUNT_INCREMENT_FACTOR}")
 
 # Boolean flags
 [ "${AUTO_LENDING_CANCEL_EXISTING:-true}" = "true" ] && CMD_ARGS+=("--cancel-existing")

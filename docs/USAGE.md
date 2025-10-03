@@ -288,6 +288,7 @@ python cli.py funding-lend-automation \
 # --parallel/--sequential: Processing mode (default: sequential)
 # --max-workers: Parallel workers (if using parallel)
 # --allow-small-orders: Allow orders smaller than minimum order size (minimum still 150)
+# --amount-increment-factor: Dynamic amount increment factor (0-1). Each order gets base_amount * (1 + factor * index)
 # --no-confirm: Skip confirmation (required for automation)
 ```
 
@@ -313,6 +314,40 @@ python cli.py funding-lend-automation \
 - **With flag**: Orders can be ≥ 150 but smaller than `min-order`
 - **Always enforced**: Bitfinex platform minimum of 150 units
 ```
+
+#### Dynamic Amount Increment Factor
+
+The `--amount-increment-factor` parameter enables progressive order sizing for more sophisticated lending strategies:
+
+```bash
+# Progressive order sizing with 10% increment per order
+python cli.py funding-lend-automation \
+  --symbol USD \
+  --total-amount 5000 \
+  --min-order 1000 \
+  --amount-increment-factor 0.1 \
+  --no-confirm
+```
+
+**Formula**: `adjusted_amount = base_amount × (1 + factor × order_index)`
+
+**Example with factor=0.1**:
+- Order 1: $1,000 × (1 + 0.1 × 0) = **$1,000**
+- Order 2: $1,000 × (1 + 0.1 × 1) = **$1,100**
+- Order 3: $1,000 × (1 + 0.1 × 2) = **$1,200**
+- Order 4: $1,000 × (1 + 0.1 × 3) = **$1,300**
+- Order 5: $1,000 × (1 + 0.1 × 4) = **$1,400**
+
+**Use Cases**:
+- **Conservative Scaling**: Lower factors (0.05-0.1) for gradual increases
+- **Aggressive Scaling**: Higher factors (0.2-0.5) for rapid fund distribution
+- **Fixed Amounts**: Factor 0.0 maintains traditional equal-sized orders
+
+**Behavior**:
+- **Range**: 0.0 to 1.0 (0% to 100% increment per order)
+- **Validation**: Automatically validated at startup
+- **Balance Check**: Each adjusted amount validated against available balance
+- **Compatibility**: Works with all other parameters including `--allow-small-orders`
 
 ### Use All Available Balance Feature
 

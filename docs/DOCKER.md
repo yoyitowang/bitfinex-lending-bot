@@ -73,6 +73,8 @@ docker-compose exec bitfinex-lending-bot tail -f /app/logs/auto_lending.log
 | `AUTO_LENDING_CANCEL_EXISTING` | `true` | Cancel existing offers first |
 | `AUTO_LENDING_PARALLEL` | `false` | Use parallel processing |
 | `AUTO_LENDING_MAX_WORKERS` | `3` | Max parallel workers |
+| `AUTO_LENDING_ALLOW_SMALL_ORDERS` | `false` | Allow orders smaller than min size |
+| `AUTO_LENDING_AMOUNT_INCREMENT_FACTOR` | `0.0` | Dynamic amount increment factor (0-1) |
 | `AUTO_LENDING_NO_CONFIRM` | `true` | Skip confirmations (required for automation) |
 | `AUTO_LENDING_INTERVAL` | `600` | Execution interval in seconds |
 
