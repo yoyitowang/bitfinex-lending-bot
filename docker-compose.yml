@@ -23,6 +23,11 @@ services:
         # Create log directory
         mkdir -p /app/logs
 
+        # Load environment from mounted .env file
+        if [ -f /app/.env ]; then
+          source /app/.env
+        fi
+
         # Auto lending loop script
         if [ \"\${AUTO_LENDING_ENABLED:-true}\" = 'true' ]; then
           echo 'Auto lending is enabled. Starting automated execution loop...'
