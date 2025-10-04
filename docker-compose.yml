@@ -18,13 +18,16 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    command: >
-      sh -c "
-        # Create log directory
-        mkdir -p /app/logs
+      command: >
+        sh -c "
+          # Create log directory
+          mkdir -p /app/logs
 
-        # Auto lending loop script
-        if [ \"\${AUTO_LENDING_ENABLED:-true}\" = 'true' ]; then
+          # Debug: Print the variable value
+          echo \"AUTO_LENDING_ENABLED=${AUTO_LENDING_ENABLED:-true}\"
+
+          # Auto lending loop script
+          if [ \"${AUTO_LENDING_ENABLED:-true}\" = 'true' ]; then
           echo 'Auto lending is enabled. Starting automated execution loop...'
           echo \"Execution interval: \${AUTO_LENDING_INTERVAL:-600} seconds\"
           echo 'Logs will be available at /app/logs/auto_lending.log'
