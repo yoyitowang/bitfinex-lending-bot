@@ -28,30 +28,23 @@ services:
           source /app/.env
         fi
 
-        # Auto lending loop script
-        if [ \"\${AUTO_LENDING_ENABLED:-true}\" = 'true' ]; then
-          echo 'Auto lending is enabled. Starting automated execution loop...'
-          echo \"Execution interval: \${AUTO_LENDING_INTERVAL:-600} seconds\"
-          echo 'Logs will be available at /app/logs/auto_lending.log'
+        # Start automated lending execution loop
+        echo 'Starting automated lending execution loop...'
+        echo \"Execution interval: \${AUTO_LENDING_INTERVAL:-600} seconds\"
+        echo 'Logs will be available at /app/logs/auto_lending.log'
 
-          # Initial execution
-          echo 'Running initial auto lending execution...'
-          /app/run_auto_lending.sh || echo 'Initial execution failed'
+        # Initial execution
+        echo 'Running initial auto lending execution...'
+        /app/run_auto_lending.sh || echo 'Initial execution failed'
 
-          # Main loop for periodic execution
-          while true; do
-            echo \"Sleeping for \${AUTO_LENDING_INTERVAL:-600} seconds until next execution...\"
-            sleep \${AUTO_LENDING_INTERVAL:-600}
+        # Main loop for periodic execution
+        while true; do
+          echo \"Sleeping for \${AUTO_LENDING_INTERVAL:-600} seconds until next execution...\"
+          sleep \${AUTO_LENDING_INTERVAL:-600}
 
-            echo 'Running scheduled auto lending execution...'
-            /app/run_auto_lending.sh || echo 'Scheduled execution failed'
-          done
-        else
-          echo 'Auto lending is disabled. Running in manual mode...'
-          echo 'Use docker-compose exec bitfinex-lending-bot bash to access the container'
-          echo 'Or run: docker-compose exec bitfinex-lending-bot /app/run_auto_lending.sh'
-          sleep infinity
-        fi
+          echo 'Running scheduled auto lending execution...'
+          /app/run_auto_lending.sh || echo 'Scheduled execution failed'
+        done
       "
 
   # Optional: Redis for caching (if needed in future)
