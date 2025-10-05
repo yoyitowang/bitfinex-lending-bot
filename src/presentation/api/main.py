@@ -10,10 +10,12 @@ from fastapi.responses import JSONResponse
 import logging
 
 from ...infrastructure.dependency_injection.container import container
-from .routes import lending, portfolio, market_data, auth
+from .routes import lending, portfolio, market_data, auth, websocket
 from .middleware.auth import auth_middleware
 from .middleware.rate_limit import rate_limit_middleware
 from .middleware.error_handler import error_handler_middleware
+from .middleware.request_validation import request_validation_middleware
+import os
 
 # 配置日誌
 logging.basicConfig(
@@ -27,6 +29,15 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """應用程式生命週期管理"""
     logger.info("Starting Bitfinex Lending API...")
+
+    # 配置依賴注入容器
+    database_url = os.getenv("DATABASE_URL")
+    redis_url = os.getenv("REDIS_URL")
+    logger.info(f"Database URL: {database_url}")
+    logger.info(f"Redis URL: {redis_url}")
+
+    container.config.database.url(database_url)
+    container.config.redis.url(redis_url)
 
     # 初始化依賴注入容器
     container.init_resources()
@@ -66,6 +77,7 @@ app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])  # 生產環境�
 # 自定義中介軟體
 app.middleware("http")(auth_middleware)
 app.middleware("http")(rate_limit_middleware)
+app.middleware("http")(request_validation_middleware)
 app.middleware("http")(error_handler_middleware)
 
 
@@ -92,6 +104,12 @@ app.include_router(
     market_data.router,
     prefix="/api/v1/market-data",
     tags=["market-data"]
+)
+
+app.include_router(
+    websocket.router,
+    prefix="/api/v1/ws",
+    tags=["websockets"]
 )
 
 

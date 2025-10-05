@@ -5,6 +5,7 @@ from typing import Optional
 
 from ....application.services.lending_application_service import LendingApplicationService
 from ....infrastructure.dependency_injection.container import container
+from ..middleware.auth import get_current_user
 
 router = APIRouter()
 
@@ -19,16 +20,13 @@ class SubmitLendingOfferRequest(BaseModel):
 @router.post("/offers", response_model=dict)
 async def submit_lending_offer(
     request: SubmitLendingOfferRequest,
-    # TODO: Add user authentication dependency
+    current_user: str = Depends(get_current_user),
     lending_service: LendingApplicationService = Depends(lambda: container.lending_application_service())
 ):
     """提交借貸報價"""
     try:
-        # TODO: Get user_id from authentication context
-        user_id = "user123"  # Placeholder
-
         result = lending_service.submit_lending_offer(
-            user_id=user_id,
+            user_id=current_user,
             symbol=request.symbol,
             amount=float(request.amount),
             rate=float(request.rate) if request.rate else None,
@@ -37,7 +35,11 @@ async def submit_lending_offer(
 
         return {
             "success": True,
-            "data": result.__dict__ if hasattr(result, '__dict__') else result,
+            "data": {
+                "offer_id": result.offer_id,
+                "status": result.status,
+                "message": result.message
+            },
             "message": "Lending offer submitted successfully"
         }
 
@@ -49,20 +51,28 @@ async def submit_lending_offer(
 
 @router.get("/offers", response_model=dict)
 async def get_lending_offers(
-    # TODO: Add user authentication dependency
+    current_user: str = Depends(get_current_user),
     lending_service: LendingApplicationService = Depends(lambda: container.lending_application_service())
 ):
     """獲取用戶活躍借貸報價"""
     try:
-        # TODO: Get user_id from authentication context
-        user_id = "user123"  # Placeholder
-
-        offers = lending_service.get_active_offers(user_id)
+        offers = lending_service.get_active_offers(current_user)
 
         return {
             "success": True,
             "data": {
-                "offers": [offer.__dict__ if hasattr(offer, '__dict__') else str(offer) for offer in offers]
+                "offers": [
+                    {
+                        "id": offer.id,
+                        "symbol": offer.symbol,
+                        "amount": str(offer.amount),
+                        "rate": str(offer.rate),
+                        "period": offer.period,
+                        "status": offer.status,
+                        "daily_earnings": str(offer.daily_earnings()),
+                        "created_at": offer.created_at.isoformat() if offer.created_at else None
+                    } for offer in offers
+                ]
             },
             "count": len(offers)
         }
@@ -74,7 +84,7 @@ async def get_lending_offers(
 @router.put("/offers/{offer_id}/cancel", response_model=dict)
 async def cancel_lending_offer(
     offer_id: str,
-    # TODO: Add user authentication dependency
+    current_user: str = Depends(get_current_user),
     lending_service: LendingApplicationService = Depends(lambda: container.lending_application_service())
 ):
     """取消借貸報價"""

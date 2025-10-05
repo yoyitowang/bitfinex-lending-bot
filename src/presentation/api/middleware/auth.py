@@ -6,16 +6,22 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+import os
 
 logger = logging.getLogger(__name__)
 
-# JWT 配置
-SECRET_KEY = "your-secret-key-here"  # 生產環境應從環境變數讀取
+# JWT 配置 - 安全性：生產環境必須設定 SECRET_KEY 環境變數
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable is required for security")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 
-# 密碼上下文
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# 密碼上下文 - 使用 scrypt 避免 bcrypt 長度限制問題
+pwd_context = CryptContext(
+    schemes=["scrypt"],
+    deprecated="auto"
+)
 
 # 安全方案
 security = HTTPBearer(auto_error=False)

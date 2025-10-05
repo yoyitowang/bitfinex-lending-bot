@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 資料庫 - 本地開發
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: bitfinex_lending
+      POSTGRES_USER: lending_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - lending_dev_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lending_user -d bitfinex_lending"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 快取 - 本地開發
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - lending_dev_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Bitfinex Lending API - 開發模式
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://lending_user:${POSTGRES_PASSWORD}@postgres:5432/bitfinex_lending
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - SECRET_KEY=${SECRET_KEY}
+      - BITFINEX_API_KEY=${BITFINEX_API_KEY}
+      - BITFINEX_API_SECRET=${BITFINEX_API_SECRET}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - lending_dev_network
+    restart: unless-stopped
+    volumes:
+      - ./src:/app/src  # 掛載源碼用於熱重載
+    command: ["python", "-m", "uvicorn", "src.presentation.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/src"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+
+networks:
+  lending_dev_network:
+    driver: bridge

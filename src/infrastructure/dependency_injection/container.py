@@ -2,6 +2,7 @@ from dependency_injector import containers, providers
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 import redis
+import os
 
 from ...domain.services.lending_service import LendingService
 from ...application.services.lending_application_service import LendingApplicationService
@@ -17,9 +18,9 @@ class Container(containers.DeclarativeContainer):
     # 基礎設施配置
     config = providers.Configuration()
 
-    # 資料庫配置
-    database_url = providers.Configuration("database.url")
-    redis_url = providers.Configuration("redis.url")
+    # 資料庫配置 - 直接從環境變數讀取
+    database_url = providers.Object(os.getenv("DATABASE_URL", ""))
+    redis_url = providers.Object(os.getenv("REDIS_URL", ""))
 
     # 資料庫引擎
     database_engine = providers.Singleton(
@@ -40,15 +41,17 @@ class Container(containers.DeclarativeContainer):
         redis_url
     )
 
-    # 倉儲實作
+    # 倉儲實作 - 使用 session provider
+    session_provider = providers.Factory(session_factory)
+
     lending_offer_repository = providers.Factory(
         PostgreSQLLendingOfferRepository,
-        session=session_factory
+        session=session_provider
     )
 
     portfolio_repository = providers.Factory(
         PostgreSQLPortfolioRepository,
-        session=session_factory
+        session=session_provider
     )
 
     market_data_repository = providers.Factory(

@@ -4,6 +4,7 @@ from typing import List
 from ....domain.repositories.market_data_repository import MarketDataRepository
 from ....infrastructure.external_services.bitfinex_api_client import BitfinexAPIClient
 from ....infrastructure.dependency_injection.container import container
+from ..middleware.auth import get_current_user
 
 router = APIRouter()
 

@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 from ....application.services.lending_application_service import LendingApplicationService
 from ....infrastructure.dependency_injection.container import container
+from ..middleware.auth import get_current_user
 
 router = APIRouter()
 
@@ -14,19 +15,44 @@ class GetPortfolioRequest(BaseModel):
 @router.get("", response_model=dict)
 async def get_portfolio(
     include_completed: bool = False,
-    # TODO: Add user authentication dependency
+    current_user: str = Depends(get_current_user),
     lending_service: LendingApplicationService = Depends(lambda: container.lending_application_service())
 ):
     """獲取用戶投資組合"""
     try:
-        # TODO: Get user_id from authentication context
-        user_id = "user123"  # Placeholder
-
-        portfolio = lending_service.get_portfolio(user_id, include_completed)
+        portfolio = lending_service.get_portfolio(current_user, include_completed)
 
         return {
             "success": True,
-            "data": portfolio.__dict__ if hasattr(portfolio, '__dict__') else portfolio
+            "data": {
+                "user_id": portfolio.user_id,
+                "summary": portfolio.summary,
+                "active_positions": [
+                    {
+                        "id": pos.id,
+                        "symbol": pos.symbol,
+                        "amount": str(pos.amount),
+                        "rate": str(pos.rate),
+                        "period": pos.period,
+                        "status": pos.status,
+                        "daily_earnings": str(pos.daily_earnings()),
+                        "created_at": pos.created_at.isoformat() if pos.created_at else None
+                    } for pos in (portfolio.active_positions or [])
+                ],
+                "completed_positions": [
+                    {
+                        "id": pos.id,
+                        "symbol": pos.symbol,
+                        "amount": str(pos.amount),
+                        "rate": str(pos.rate),
+                        "period": pos.period,
+                        "status": pos.status,
+                        "created_at": pos.created_at.isoformat() if pos.created_at else None,
+                        "completed_at": pos.completed_at.isoformat() if pos.completed_at else None
+                    } for pos in (portfolio.completed_positions or [])
+                ] if include_completed else None,
+                "performance_metrics": portfolio.performance_metrics
+            }
         }
 
     except Exception as e:

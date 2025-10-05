@@ -50,10 +50,11 @@ def fake_redis():
 def test_container(test_session, fake_redis):
     """測試用依賴注入容器"""
     container = Container()
-    container.config.from_dict({
-        "database": {"url": "sqlite:///:memory:"},
-        "redis": {"url": "redis://fake"}
-    })
+
+    # 覆蓋提供者以使用測試資源
+    container.database_engine.override(test_session.bind)
+    container.session_factory.override(lambda: test_session)
+    container.redis_client.override(fake_redis)
 
     # 覆蓋真實實作為測試實作
     container.database_engine.override(test_session.bind)
