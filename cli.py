@@ -1128,7 +1128,7 @@ class LendingOrder:
 class FundingLendingAutomation:
     """Automated funding lending system"""
 
-    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None, rate_interval: float = 0.000005):
+    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None, rate_interval: float = 0.000005, avg_order_depth: int = 10):
         self.public_api = BitfinexAPI()
         self.auth_api = None
         if api_key and api_secret:
@@ -1136,6 +1136,7 @@ class FundingLendingAutomation:
         self.console = Console()
         self.rate_interval = rate_interval
         self.lowest_offer_rate = None
+        self.avg_order_depth = avg_order_depth  # Number of top orders to average for rate calculation
 
     def analyze_market_rates(self, symbol: str) -> Dict[int, MarketRateStats]:
         """
@@ -1151,7 +1152,7 @@ class FundingLendingAutomation:
 
         # Get funding book data
         book_data = self.public_api.get_funding_book(symbol, precision='P0')
-        self.lowest_offer_rate = None
+        all_lending_rates = []  # Collect all lending rates first
         if book_data:
             for entry in book_data[:100]:  # Analyze top 100 entries for better stats
                 rate, period, count, amount = entry
@@ -1160,9 +1161,26 @@ class FundingLendingAutomation:
                     period_stats[period]['rates'].append(rate)
                     period_stats[period]['volumes'].append(volume)
                     period_stats[period]['count'] += int(count)
-                    # Track the lowest offer rate across all periods
-                    if self.lowest_offer_rate is None or rate < self.lowest_offer_rate:
-                        self.lowest_offer_rate = rate
+                    # Collect all lending rates
+                    all_lending_rates.append(rate)
+
+            # Sort lending rates from lowest to highest and take top N for averaging
+            if all_lending_rates:
+                # Sort rates in ascending order (lowest first) and take top N
+                sorted_rates = sorted(all_lending_rates)
+                # Take up to avg_order_depth lowest rates
+                top_rates = sorted_rates[:min(self.avg_order_depth, len(sorted_rates))]
+
+                # Calculate average of the lowest N lending rates
+                self.lowest_offer_rate = sum(top_rates) / len(top_rates)
+                print(f"Debug: Calculated average lending rate from {len(top_rates)} lowest orders: {self.lowest_offer_rate:.6f} ({self.lowest_offer_rate*100:.4f}%)")
+                print(f"Debug: Rate range: {sorted_rates[0]:.6f} - {top_rates[-1]:.6f}")
+
+                if len(top_rates) < self.avg_order_depth:
+                    print(f"Debug: Warning - Only {len(all_lending_rates)} lending orders available (requested averaging top {self.avg_order_depth})")
+            else:
+                self.lowest_offer_rate = None
+                print("Debug: Warning - No lending orders found in order book data")
 
         # Get recent trades data
         trades_data = self.public_api.get_funding_trades(symbol, limit=200)
@@ -2229,6 +2247,7 @@ class FundingLendingAutomation:
 @click.option('--symbol', default='USD', help='Funding currency symbol')
 @click.option('--total-amount', type=float, default=1000.0, help='Total amount to lend (0 = use all available balance)')
 @click.option('--min-order', type=float, default=150.0, help='Minimum order size')
+@click.option('--min-order-percentage', type=float, help='Minimum order size as percentage of available balance (0-100). Overrides --min-order if set.')
 @click.option('--max-orders', type=int, default=50, help='Maximum number of orders to place (default 50)')
 @click.option('--max-rate-increment', type=float, default=0.0001, help='Maximum rate increment from base in decimal (0.0001 = 0.01%)')
 @click.option('--rate-interval', type=float, default=0.000005, help='Rate interval between orders in decimal (0.000005 = 0.0005%)')
@@ -2238,25 +2257,63 @@ class FundingLendingAutomation:
 @click.option('--max-workers', type=int, default=3, help='Maximum number of parallel workers (default: 3)')
 @click.option('--allow-small-orders', is_flag=True, help='Allow orders smaller than minimum order size (minimum still 150)')
 @click.option('--amount-increment-factor', type=float, default=0.0, help='Dynamic amount increment factor (0-1). Each order gets base_amount * (1 + factor * index)')
+@click.option('--avg-order-depth', type=int, default=10, help='Number of top lending orders to average for rate calculation (default: 10)')
 @click.option('--no-confirm', is_flag=True, help='Skip user confirmation (use with caution)')
 @click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
 @click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
-def funding_lend_automation(symbol, total_amount, min_order, max_orders, max_rate_increment, rate_interval, target_period, cancel_existing, parallel, max_workers, allow_small_orders, amount_increment_factor, no_confirm, api_key, api_secret):
+def funding_lend_automation(symbol, total_amount, min_order, min_order_percentage, max_orders, max_rate_increment, rate_interval, target_period, cancel_existing, parallel, max_workers, allow_small_orders, amount_increment_factor, avg_order_depth, no_confirm, api_key, api_secret):
     """Automated funding lending strategy with market analysis and tiered orders"""
     try:
         if not api_key or not api_secret:
             raise ValueError("API credentials required")
 
-        # Validate minimum order size (this is always required)
-        if min_order <= 0:
-            raise ValueError("Minimum order size must be positive")
+        # Validate minimum order size (this is always required when percentage is not set)
+        if min_order_percentage is None and min_order <= 0:
+            raise ValueError("Minimum order size must be positive when not using percentage")
+
+        # Validate min_order_percentage (must be between 0 and 100)
+        if min_order_percentage is not None:
+            if not 0.0 < min_order_percentage <= 100.0:
+                raise ValueError("Minimum order percentage must be between 0 and 100")
 
         # Validate amount increment factor (must be between 0 and 1)
         if not 0.0 <= amount_increment_factor <= 1.0:
             raise ValueError("Amount increment factor must be between 0.0 and 1.0")
 
+        # Validate avg_order_depth (must be positive and reasonable)
+        if avg_order_depth <= 0:
+            raise ValueError("Average order depth must be positive")
+        if avg_order_depth > 50:
+            raise ValueError("Average order depth cannot exceed 50 (to ensure sufficient order book data)")
+
         # Initialize automation system
-        automation = FundingLendingAutomation(api_key, api_secret, rate_interval)
+        automation = FundingLendingAutomation(api_key, api_secret, rate_interval, avg_order_depth)
+
+        # Calculate min_order based on percentage if specified
+        if min_order_percentage is not None:
+            print(f"Minimum order percentage set to {min_order_percentage}%, retrieving available balance for {symbol}...")
+
+            # Get wallet balance and pending offers to calculate effective balance
+            available_balance = automation._get_funding_wallet_balance(symbol)
+            pending_offers = automation._get_pending_offers_total(symbol) or 0
+
+            # Calculate effective balance considering pending offers cancellation
+            effective_balance = (available_balance or 0) + (pending_offers if cancel_existing else 0)
+
+            if effective_balance <= 0:
+                raise ValueError(f"No available balance found for {symbol} to calculate percentage-based minimum order")
+
+            # Calculate min_order from percentage
+            calculated_min_order = effective_balance * (min_order_percentage / 100.0)
+
+            # Ensure it doesn't go below Bitfinex minimum
+            bitfinex_min = 150.0
+            if calculated_min_order < bitfinex_min:
+                print(f"Warning: Calculated minimum order (${calculated_min_order:.2f}) is below Bitfinex minimum (${bitfinex_min:.2f}), using minimum instead")
+                calculated_min_order = bitfinex_min
+
+            min_order = calculated_min_order
+            print(f"Calculated minimum order size: ${min_order:.2f} ({min_order_percentage}% of ${effective_balance:.2f} effective balance)")
 
         # Initialize final_effective_balance
         final_effective_balance = None

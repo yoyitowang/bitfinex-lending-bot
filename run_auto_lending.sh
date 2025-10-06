@@ -47,6 +47,8 @@ CMD_ARGS=(
 [ -n "${AUTO_LENDING_RATE_INTERVAL}" ] && CMD_ARGS+=("--rate-interval" "${AUTO_LENDING_RATE_INTERVAL}")
 [ -n "${AUTO_LENDING_TARGET_PERIOD}" ] && CMD_ARGS+=("--target-period" "${AUTO_LENDING_TARGET_PERIOD}")
 [ -n "${AUTO_LENDING_AMOUNT_INCREMENT_FACTOR}" ] && CMD_ARGS+=("--amount-increment-factor" "${AUTO_LENDING_AMOUNT_INCREMENT_FACTOR}")
+[ -n "${AUTO_LENDING_AVG_ORDER_DEPTH}" ] && CMD_ARGS+=("--avg-order-depth" "${AUTO_LENDING_AVG_ORDER_DEPTH}")
+[ -n "${AUTO_LENDING_MIN_ORDER_PERCENTAGE}" ] && CMD_ARGS+=("--min-order-percentage" "${AUTO_LENDING_MIN_ORDER_PERCENTAGE}")
 
 # Boolean flags
 [ "${AUTO_LENDING_CANCEL_EXISTING:-true}" = "true" ] && CMD_ARGS+=("--cancel-existing")
