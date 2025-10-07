@@ -10,6 +10,10 @@ from ..repositories.postgresql_lending_offer_repository import PostgreSQLLending
 from ..repositories.postgresql_portfolio_repository import PostgreSQLPortfolioRepository
 from ..repositories.redis_market_data_repository import RedisMarketDataRepository
 from ..external_services.bitfinex_api_client import BitfinexAPIClient
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+from funding_market_analyzer import FundingMarketAnalyzer
 
 
 class Container(containers.DeclarativeContainer):
@@ -62,6 +66,10 @@ class Container(containers.DeclarativeContainer):
     # 外部服務
     bitfinex_api_client = providers.Singleton(
         BitfinexAPIClient
+    )
+
+    funding_market_analyzer = providers.Singleton(
+        FundingMarketAnalyzer
     )
 
     # 資源初始化/清理方法

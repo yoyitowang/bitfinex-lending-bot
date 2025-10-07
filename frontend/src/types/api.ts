@@ -100,3 +100,47 @@ export interface PortfolioUpdate extends WebSocketMessage {
   type: 'portfolio_update';
   data: PortfolioResponse;
 }
+
+// Automated Lending Types
+export interface AutomatedLendingRequest {
+  symbol: string;
+  total_amount: number;
+  period: number;
+  min_order_size?: number;
+  max_orders?: number;
+  rate_min?: number;
+  rate_max?: number;
+  cancel_existing: boolean;
+  use_all_balance: boolean;
+}
+
+export interface AutomatedLendingAnalysis {
+  symbol: string;
+  average_rate_2d?: number;
+  average_rate_30d?: number;
+  volatility_2d?: number;
+  volatility_30d?: number;
+  high_yield_opportunities?: number;
+  recommendations?: string;
+  timestamp: string;
+}
+
+export interface AutomatedLendingConditions {
+  symbol: string;
+  period: number;
+  should_lend: boolean;
+  confidence?: number;
+  recommended_rate?: number;
+  recommended_amount?: number;
+  reasoning?: string;
+}
+
+export interface AutomatedLendingResult {
+  offer_id: string;
+  symbol: string;
+  amount: string;
+  rate: string;
+  period: number;
+  cancelled_offers?: string[];
+  analysis?: AutomatedLendingAnalysis;
+}

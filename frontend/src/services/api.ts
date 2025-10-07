@@ -1,6 +1,6 @@
 import axios from 'axios';
 import type { AxiosInstance, AxiosResponse } from 'axios';
-import type { ApiResponse, LoginRequest, LoginResponse, MarketDataResponse, SubmitLendingOfferRequest, SubmitLendingOfferResponse, PortfolioResponse, LendingOffer } from '../types/api';
+import type { ApiResponse, LoginRequest, LoginResponse, MarketDataResponse, SubmitLendingOfferRequest, SubmitLendingOfferResponse, PortfolioResponse, LendingOffer, AutomatedLendingRequest, AutomatedLendingAnalysis, AutomatedLendingConditions, AutomatedLendingResult } from '../types/api';
 
 // API Configuration
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -90,6 +90,21 @@ export const lendingApi = {
 
   cancelOffer: async (offerId: string): Promise<void> => {
     await api.put(`/api/v1/lending/offers/${offerId}/cancel`);
+  },
+
+  getAutomatedAnalysis: async (symbol: string): Promise<AutomatedLendingAnalysis> => {
+    const response = await api.get<ApiResponse<AutomatedLendingAnalysis>>(`/api/v1/lending/automated/analysis/${symbol}`);
+    return response.data.data!;
+  },
+
+  checkAutomatedConditions: async (symbol: string, period: number): Promise<AutomatedLendingConditions> => {
+    const response = await api.get<ApiResponse<AutomatedLendingConditions>>(`/api/v1/lending/automated/check/${symbol}/${period}`);
+    return response.data.data!;
+  },
+
+  executeAutomatedLending: async (params: AutomatedLendingRequest): Promise<AutomatedLendingResult> => {
+    const response = await api.post<ApiResponse<AutomatedLendingResult>>('/api/v1/lending/automated/execute', params);
+    return response.data.data!;
   },
 };
 
