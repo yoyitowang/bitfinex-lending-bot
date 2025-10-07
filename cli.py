@@ -2225,7 +2225,8 @@ class FundingLendingAutomation:
     def run_automation(self, symbol: str, total_amount: float, min_order: float,
                        max_orders: int = 50, target_period: int = 30, confirm: bool = True,
                        cancel_existing: bool = False, allow_small_orders: bool = False,
-                       amount_increment_factor: float = 0.0, effective_balance: Optional[float] = None) -> bool:
+                       amount_increment_factor: float = 0.0, effective_balance: Optional[float] = None,
+                       prioritize_high_returns: bool = True) -> bool:
         """
         Run the complete lending automation process
 
@@ -2239,8 +2240,9 @@ class FundingLendingAutomation:
             cancel_existing: Whether to cancel existing offers before placing new ones
             allow_small_orders: Allow orders smaller than min_order (minimum still 150)
             amount_increment_factor: Dynamic amount adjustment factor (0-1). Each order amount
-                                   is multiplied by (1 + factor * order_index)
+                                    is multiplied by (1 + factor * order_index)
             effective_balance: Effective available balance (accounts for pending offers cancellation)
+            prioritize_high_returns: Whether to prioritize high-return offers (>= threshold APY)
 
         Returns True if successful
         """
@@ -2484,7 +2486,8 @@ def funding_lend_automation(symbol, total_amount, min_order, min_order_percentag
             cancel_existing=cancel_existing,
             allow_small_orders=allow_small_orders,
             amount_increment_factor=amount_increment_factor,
-            effective_balance=final_effective_balance
+            effective_balance=final_effective_balance,
+            prioritize_high_returns=prioritize_high_returns
         )
 
         if success:
