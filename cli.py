@@ -1102,8 +1102,9 @@ class TieredMarketAnalysis:
     symbol: str
     tiers: Dict[str, MarketRateStats]  # tier_name -> stats
     high_yield_opportunities: List[Dict[str, Any]]  # High yield opportunities >=15% APY
+    high_return_offers: List[Dict[str, Any]]  # Any offers >=15% APY regardless of period
     recommended_tier: str
-    recommended_approach: str  # "high_yield" or "standard"
+    recommended_approach: str  # "high_yield", "high_return", or "standard"
     market_signals: Dict[str, Any]  # Market signals from analyzer
 
 @dataclass
@@ -1128,7 +1129,7 @@ class LendingOrder:
 class FundingLendingAutomation:
     """Automated funding lending system"""
 
-    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None, rate_interval: float = 0.000005, avg_order_depth: int = 10):
+    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None, rate_interval: float = 0.000005, avg_order_depth: int = 10, high_return_threshold: float = 15.0):
         self.public_api = BitfinexAPI()
         self.auth_api = None
         if api_key and api_secret:
@@ -1137,6 +1138,7 @@ class FundingLendingAutomation:
         self.rate_interval = rate_interval
         self.lowest_offer_rate = None
         self.avg_order_depth = avg_order_depth  # Number of top orders to average for rate calculation
+        self.high_return_threshold = high_return_threshold  # APY threshold for high return offers (as percentage)
 
     def analyze_market_rates(self, symbol: str) -> Dict[int, MarketRateStats]:
         """
@@ -1238,6 +1240,38 @@ class FundingLendingAutomation:
 
         return result
 
+    def scan_high_return_offers(self, symbol: str) -> List[Dict[str, Any]]:
+        """
+        Scan entire order book for any offers with >=15% APY regardless of period
+
+        Returns list of high return offers sorted by APY descending
+        """
+        high_return_offers = []
+
+        # Get funding book data
+        book_data = self.public_api.get_funding_book(symbol, precision='P0')
+
+        if book_data:
+            for entry in book_data[:200]:  # Scan top 200 entries for comprehensive coverage
+                rate, period, count, amount = entry
+                yearly_rate = rate * 365
+
+                # Check for any offer >= threshold APY
+                if yearly_rate >= (self.high_return_threshold / 100.0) and amount > 0:  # Lending offers (positive amounts)
+                    high_return_offers.append({
+                        'period': period,
+                        'daily_rate': rate,
+                        'yearly_rate': yearly_rate,
+                        'amount': amount,
+                        'count': count,
+                        'priority_score': yearly_rate * amount  # APY * volume as priority score
+                    })
+
+        # Sort by yearly rate descending (highest APY first)
+        high_return_offers.sort(key=lambda x: x['yearly_rate'], reverse=True)
+
+        return high_return_offers
+
     def analyze_tiered_market(self, symbol: str) -> TieredMarketAnalysis:
         """
         Analyze market rates by tiered time periods
@@ -1254,6 +1288,9 @@ class FundingLendingAutomation:
         """
         # Get all period data
         all_stats = self.analyze_market_rates(symbol)
+
+        # Scan for high return offers (>=15% APY regardless of period)
+        high_return_offers = self.scan_high_return_offers(symbol)
 
         # Define tier mappings
         tier_definitions = {
@@ -1338,7 +1375,11 @@ class FundingLendingAutomation:
         recommended_tier = '2d'  # Default to shortest term
         recommended_approach = 'standard'
 
-        if high_yield_opportunities:
+        # Priority 1: High return offers (>=15% APY regardless of period)
+        if high_return_offers:
+            recommended_approach = 'high_return'
+        # Priority 2: High yield opportunities (30+ days with substantial volume)
+        elif high_yield_opportunities:
             # Sort by APY descending, then by volume descending
             high_yield_opportunities.sort(key=lambda x: (x['volume_weighted_apy'], x['total_volume']), reverse=True)
             best_opportunity = high_yield_opportunities[0]
@@ -1366,24 +1407,29 @@ class FundingLendingAutomation:
             symbol=symbol,
             tiers=tiers,
             high_yield_opportunities=high_yield_opportunities,
+            high_return_offers=high_return_offers,
             recommended_tier=recommended_tier,
             recommended_approach=recommended_approach,
             market_signals=market_signals
         )
 
-    def generate_recommendation(self, symbol: str, target_period: int = 30) -> LendingRecommendation:
+    def generate_recommendation(self, symbol: str, target_period: int = 30, prioritize_high_returns: bool = True) -> LendingRecommendation:
         """
         Generate lending rate recommendation based on tiered market analysis
 
-        Strategy:
-        1. Check for high-yield opportunities (>=15% APY, 30+ days, substantial volume)
-        2. If found, recommend volume-weighted average rate for immediate adoption
-        3. Otherwise, use standard strategy with shortest viable tier (2 days)
-           at median rate adjusted by -0.01% for quick fills
+        Strategy Priority (if prioritize_high_returns=True):
+        1. High Return Offers: Any offers >=15% APY regardless of period (IMMEDIATE PRIORITY)
+        2. High-yield opportunities (>=15% APY, 30+ days, substantial volume)
+        3. Standard strategy with shortest viable tier (2 days)
+
+        Strategy Priority (if prioritize_high_returns=False):
+        1. High-yield opportunities (>=15% APY, 30+ days, substantial volume)
+        2. Standard strategy with shortest viable tier (2 days)
 
         Args:
             symbol: Funding symbol (e.g., 'USD')
             target_period: Target lending period in days (legacy parameter)
+            prioritize_high_returns: Whether to prioritize any >=15% APY offers regardless of period
 
         Returns:
             LendingRecommendation with suggested rates and detailed reasoning
@@ -1401,8 +1447,34 @@ class FundingLendingAutomation:
                 reasoning="No market data available, using conservative default"
             )
 
-        # Strategy 1: Immediate Adoption Priority - High Yield Opportunities
-        if tiered_analysis.high_yield_opportunities:
+        # Strategy 1: IMMEDIATE PRIORITY - High Return Offers (>= threshold APY regardless of period)
+        if prioritize_high_returns and tiered_analysis.high_return_offers:
+            best_offer = tiered_analysis.high_return_offers[0]  # Already sorted by APY descending
+
+            recommended_daily_rate = best_offer['daily_rate']
+            recommended_yearly_rate = best_offer['yearly_rate']
+
+            reasoning = f"🔥 ULTIMATE HIGH-RETURN OPPORTUNITY DETECTED! 🔥\n"
+            reasoning += f"• Annual Return: {recommended_yearly_rate:.1f}% APY\n"
+            reasoning += f"• Daily Rate: {recommended_daily_rate*100:.4f}%\n"
+            reasoning += f"• Period: {best_offer['period']} days\n"
+            reasoning += f"• Available Amount: ${best_offer['amount']:,.0f}\n"
+            reasoning += f"• Order Count: {best_offer['count']}\n"
+            reasoning += f"• STRATEGY: IMMEDIATE ADOPTION - Any >={self.high_return_threshold:.1f}% APY offer gets top priority!\n"
+            reasoning += "• RATIONALE: Maximize returns by capturing exceptional market opportunities"
+
+            return LendingRecommendation(
+                symbol=symbol,
+                recommended_daily_rate=recommended_daily_rate,
+                recommended_yearly_rate=recommended_yearly_rate,
+                market_max_rate=recommended_daily_rate,
+                increment=0.0,  # No increment for high-return opportunities
+                confidence_score=0.98,  # Very high confidence for immediate high-return opportunities
+                reasoning=reasoning
+            )
+
+        # Strategy 2: High-Yield Long-Term Opportunities
+        elif tiered_analysis.high_yield_opportunities:
             best_opportunity = tiered_analysis.high_yield_opportunities[0]  # Already sorted by APY and volume
 
             recommended_daily_rate = best_opportunity['volume_weighted_rate']
@@ -1681,6 +1753,7 @@ class FundingLendingAutomation:
         table.add_column("Orders", style="white", justify="right")
         table.add_column("Volume", style="green", justify="right")
         table.add_column("Avg APR", style="yellow", justify="right")
+        table.add_column("Max APR", style="red", justify="right")
         table.add_column("Median Rate", style="blue", justify="right")
         table.add_column("Volume Wght", style="magenta", justify="right")
         table.add_column("Top 3 Rates", style="red", justify="right")
@@ -1693,7 +1766,8 @@ class FundingLendingAutomation:
                     tier_name,
                     f"{stats.count}",
                     f"${stats.total_volume:,.0f}",
-                    f"{stats.avg_yearly_rate:.4f}%",
+                    f"{stats.avg_yearly_rate*100:.4f}%",
+                    f"{stats.max_yearly_rate*100:.4f}%",
                     f"{stats.median_daily_rate*100:.4f}%",
                     f"{stats.volume_weighted_avg_daily_rate*100:.4f}%",
                     top_3_display
@@ -1701,9 +1775,32 @@ class FundingLendingAutomation:
 
         self.console.print(table)
 
+        # Display high return offers if any (>=15% APY regardless of period)
+        if tiered_analysis.high_return_offers:
+            self.console.print(f"\n[bold red]🔥 High-Return Offers (>=15% APY - ANY PERIOD)[/bold red]")
+
+            return_table = Table(show_header=True, header_style="bold red")
+            return_table.add_column("Period", style="white", justify="right")
+            return_table.add_column("APY", style="red", justify="right")
+            return_table.add_column("Daily Rate", style="yellow", justify="right")
+            return_table.add_column("Amount", style="green", justify="right")
+            return_table.add_column("Orders", style="blue", justify="right")
+
+            for offer in tiered_analysis.high_return_offers[:5]:  # Show top 5
+                return_table.add_row(
+                    f"{offer['period']}d",
+                    f"{offer['yearly_rate']:.1f}%",
+                    f"{offer['daily_rate']*100:.4f}%",
+                    f"${offer['amount']:,.0f}",
+                    str(offer['count'])
+                )
+
+            self.console.print(return_table)
+            self.console.print(f"[dim]💡 These offers will be prioritized if high-return strategy is enabled[/dim]")
+
         # Display high yield opportunities if any
         if tiered_analysis.high_yield_opportunities:
-            self.console.print(f"\n[bold green]🚀 High-Yield Opportunities (>=15% APY)[/bold green]")
+            self.console.print(f"\n[bold green]🚀 High-Yield Opportunities (>=15% APY, 30+ days)[/bold green]")
 
             opp_table = Table(show_header=True, header_style="bold green")
             opp_table.add_column("Tier", style="cyan")
@@ -1738,8 +1835,17 @@ class FundingLendingAutomation:
             self.console.print(signal_table)
 
         # Display recommendation approach
-        approach_color = "green" if tiered_analysis.recommended_approach == "high_yield" else "blue"
-        self.console.print(f"\n[bold {approach_color}]🎯 Recommended Approach: {tiered_analysis.recommended_approach.upper()}[/bold {approach_color}]")
+        if tiered_analysis.recommended_approach == "high_return":
+            approach_color = "red"
+            approach_desc = "HIGH-RETURN (>=15% APY ANY PERIOD)"
+        elif tiered_analysis.recommended_approach == "high_yield":
+            approach_color = "green"
+            approach_desc = "HIGH-YIELD (30+ DAYS)"
+        else:
+            approach_color = "blue"
+            approach_desc = "STANDARD STRATEGY"
+
+        self.console.print(f"\n[bold {approach_color}]🎯 Recommended Approach: {approach_desc}[/bold {approach_color}]")
         self.console.print(f"[dim]Preferred Tier: {tiered_analysis.recommended_tier}[/dim]")
 
     def display_recommendation(self, recommendation: LendingRecommendation) -> None:
@@ -2192,7 +2298,7 @@ class FundingLendingAutomation:
             self.display_market_analysis(symbol)
 
             # Step 2: Generate recommendation
-            recommendation = self.generate_recommendation(symbol, target_period)
+            recommendation = self.generate_recommendation(symbol, target_period, prioritize_high_returns)
             self.display_recommendation(recommendation)
 
             # Step 3: Generate order strategy
@@ -2258,10 +2364,12 @@ class FundingLendingAutomation:
 @click.option('--allow-small-orders', is_flag=True, help='Allow orders smaller than minimum order size (minimum still 150)')
 @click.option('--amount-increment-factor', type=float, default=0.0, help='Dynamic amount increment factor (0-1). Each order gets base_amount * (1 + factor * index)')
 @click.option('--avg-order-depth', type=int, default=10, help='Number of top lending orders to average for rate calculation (default: 10)')
+@click.option('--high-return-threshold', type=float, default=15.0, help='APY threshold for high-return offers in percentage (default: 15.0)')
+@click.option('--prioritize-high-returns/--standard-strategy', default=True, help='Prioritize any >= threshold APY offers regardless of period (default: enabled)')
 @click.option('--no-confirm', is_flag=True, help='Skip user confirmation (use with caution)')
 @click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
 @click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
-def funding_lend_automation(symbol, total_amount, min_order, min_order_percentage, max_orders, max_rate_increment, rate_interval, target_period, cancel_existing, parallel, max_workers, allow_small_orders, amount_increment_factor, avg_order_depth, no_confirm, api_key, api_secret):
+def funding_lend_automation(symbol, total_amount, min_order, min_order_percentage, max_orders, max_rate_increment, rate_interval, target_period, cancel_existing, parallel, max_workers, allow_small_orders, amount_increment_factor, avg_order_depth, high_return_threshold, prioritize_high_returns, no_confirm, api_key, api_secret):
     """Automated funding lending strategy with market analysis and tiered orders"""
     try:
         if not api_key or not api_secret:
@@ -2286,8 +2394,14 @@ def funding_lend_automation(symbol, total_amount, min_order, min_order_percentag
         if avg_order_depth > 50:
             raise ValueError("Average order depth cannot exceed 50 (to ensure sufficient order book data)")
 
+        # Validate high_return_threshold (must be positive and reasonable)
+        if high_return_threshold <= 0:
+            raise ValueError("High return threshold must be positive")
+        if high_return_threshold > 100:
+            raise ValueError("High return threshold cannot exceed 100%")
+
         # Initialize automation system
-        automation = FundingLendingAutomation(api_key, api_secret, rate_interval, avg_order_depth)
+        automation = FundingLendingAutomation(api_key, api_secret, rate_interval, avg_order_depth, high_return_threshold)
 
         # Calculate min_order based on percentage if specified
         if min_order_percentage is not None:
