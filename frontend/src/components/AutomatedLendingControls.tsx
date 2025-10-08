@@ -109,18 +109,27 @@ export const AutomatedLendingControls: React.FC<AutomatedLendingControlsProps> =
 
   return (
     <Box>
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-          <Analytics sx={{ mr: 1, color: 'primary.main' }} />
-          <Typography variant="h6">Automated Lending Controls</Typography>
+      <Paper sx={{ p: { xs: 2, md: 3 }, mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: { xs: 2, md: 3 } }}>
+          <Analytics sx={{ mr: 1, color: 'primary.main', fontSize: { xs: '1.2rem', md: '1.5rem' } }} />
+          <Typography
+            variant="h6"
+            sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' } }}
+          >
+            Automated Lending Controls
+          </Typography>
         </Box>
 
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ mb: 3, fontSize: { xs: '0.875rem', md: '0.875rem' } }}
+        >
           Configure and execute automated lending strategies based on real-time market analysis.
           The system will automatically determine optimal lending parameters when conditions are met.
         </Typography>
 
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 2, md: 3 } }}>
           {/* Symbol Selection */}
           <Box>
             <TextField
@@ -184,7 +193,7 @@ export const AutomatedLendingControls: React.FC<AutomatedLendingControlsProps> =
           </Box>
 
           {/* Rate Range */}
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 2, sm: 2 } }}>
             <TextField
               fullWidth
               label="Minimum Rate (%)"
@@ -192,6 +201,7 @@ export const AutomatedLendingControls: React.FC<AutomatedLendingControlsProps> =
               value={rateMin}
               onChange={(e) => setRateMin(e.target.value)}
               InputProps={{ inputProps: { min: 0, step: 0.01 } }}
+              size="small"
             />
             <TextField
               fullWidth
@@ -200,6 +210,7 @@ export const AutomatedLendingControls: React.FC<AutomatedLendingControlsProps> =
               value={rateMax}
               onChange={(e) => setRateMax(e.target.value)}
               InputProps={{ inputProps: { min: 0, step: 0.01 } }}
+              size="small"
             />
           </Box>
         </Box>
@@ -283,7 +294,14 @@ export const AutomatedLendingControls: React.FC<AutomatedLendingControlsProps> =
         )}
 
         {/* Action Buttons */}
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          gap: 2,
+          '& .MuiButton-root': {
+            minWidth: { xs: '100%', sm: 'auto' }
+          }
+        }}>
           <Button
             variant="outlined"
             startIcon={<Analytics />}
@@ -292,6 +310,8 @@ export const AutomatedLendingControls: React.FC<AutomatedLendingControlsProps> =
               refetchConditions();
             }}
             disabled={analysisLoading || conditionsLoading}
+            size="large"
+            sx={{ flex: { xs: 1, sm: 'none' } }}
           >
             {analysisLoading || conditionsLoading ? <CircularProgress size={20} /> : 'Analyze'}
           </Button>
@@ -302,6 +322,8 @@ export const AutomatedLendingControls: React.FC<AutomatedLendingControlsProps> =
             startIcon={<PlayArrow />}
             onClick={() => setConfirmDialogOpen(true)}
             disabled={!conditionsCheck?.should_lend || executeMutation.isPending}
+            size="large"
+            sx={{ flex: { xs: 1, sm: 'none' } }}
           >
             {executeMutation.isPending ? <CircularProgress size={20} /> : 'Execute Automated Lending'}
           </Button>
@@ -309,39 +331,80 @@ export const AutomatedLendingControls: React.FC<AutomatedLendingControlsProps> =
       </Paper>
 
       {/* Confirmation Dialog */}
-      <Dialog open={confirmDialogOpen} onClose={() => setConfirmDialogOpen(false)}>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center' }}>
-          <Warning sx={{ mr: 1, color: 'warning.main' }} />
+      <Dialog
+        open={confirmDialogOpen}
+        onClose={() => setConfirmDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+        sx={{
+          '& .MuiDialog-paper': {
+            margin: { xs: 2, sm: 3 }
+          }
+        }}
+      >
+        <DialogTitle sx={{
+          display: 'flex',
+          alignItems: 'center',
+          fontSize: { xs: '1.1rem', sm: '1.25rem' }
+        }}>
+          <Warning sx={{ mr: 1, color: 'warning.main', fontSize: { xs: '1.2rem', sm: '1.5rem' } }} />
           Confirm Automated Lending Execution
         </DialogTitle>
 
-        <DialogContent>
-          <Typography gutterBottom>
+        <DialogContent sx={{ p: { xs: 2, sm: 3 } }}>
+          <Typography
+            gutterBottom
+            sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+          >
             You are about to execute automated lending with the following parameters:
           </Typography>
 
-          <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
-            <Typography><strong>Symbol:</strong> {selectedSymbol}</Typography>
-            <Typography><strong>Amount:</strong> ${totalAmount} {useAllBalance ? '(All Available)' : ''}</Typography>
-            <Typography><strong>Period:</strong> {period} days</Typography>
-            <Typography><strong>Max Orders:</strong> {maxOrders}</Typography>
-            {rateMin && <Typography><strong>Min Rate:</strong> {rateMin}%</Typography>}
-            {rateMax && <Typography><strong>Max Rate:</strong> {rateMax}%</Typography>}
-            {cancelExisting && <Typography color="error.main"><strong>Will cancel existing offers</strong></Typography>}
+          <Box sx={{
+            mt: 2,
+            p: { xs: 1.5, sm: 2 },
+            bgcolor: 'background.paper',
+            borderRadius: 1,
+            fontSize: { xs: '0.875rem', sm: '1rem' }
+          }}>
+            <Typography sx={{ mb: 1 }}><strong>Symbol:</strong> {selectedSymbol}</Typography>
+            <Typography sx={{ mb: 1 }}><strong>Amount:</strong> ${totalAmount} {useAllBalance ? '(All Available)' : ''}</Typography>
+            <Typography sx={{ mb: 1 }}><strong>Period:</strong> {period} days</Typography>
+            <Typography sx={{ mb: 1 }}><strong>Max Orders:</strong> {maxOrders}</Typography>
+            {rateMin && <Typography sx={{ mb: 1 }}><strong>Min Rate:</strong> {rateMin}%</Typography>}
+            {rateMax && <Typography sx={{ mb: 1 }}><strong>Max Rate:</strong> {rateMax}%</Typography>}
+            {cancelExisting && <Typography color="error.main" sx={{ fontWeight: 'bold' }}>Will cancel existing offers</Typography>}
           </Box>
 
-          <Alert severity="warning" sx={{ mt: 2 }}>
+          <Alert
+            severity="warning"
+            sx={{
+              mt: 2,
+              fontSize: { xs: '0.75rem', sm: '0.875rem' }
+            }}
+          >
             This action will create lending offers on Bitfinex. Please ensure you understand the risks and have sufficient balance.
           </Alert>
         </DialogContent>
 
-        <DialogActions>
-          <Button onClick={() => setConfirmDialogOpen(false)}>Cancel</Button>
+        <DialogActions sx={{
+          p: { xs: 2, sm: 3 },
+          flexDirection: { xs: 'column', sm: 'row' },
+          gap: { xs: 1, sm: 2 }
+        }}>
+          <Button
+            onClick={() => setConfirmDialogOpen(false)}
+            fullWidth={window.innerWidth < 600}
+            size="large"
+          >
+            Cancel
+          </Button>
           <Button
             onClick={handleExecute}
             variant="contained"
             color="primary"
             disabled={executeMutation.isPending}
+            fullWidth={window.innerWidth < 600}
+            size="large"
           >
             {executeMutation.isPending ? <CircularProgress size={20} /> : 'Execute'}
           </Button>
