@@ -28,7 +28,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { portfolioApi } from '../services/api';
 import { usePortfolioWebSocket } from '../hooks/useWebSocket';
-import type { LendingOffer, PortfolioUpdate } from '../types/api';
+import type { LendingOffer } from '../types/api';
 
 interface PortfolioOverviewProps {
   onRefresh?: () => void;
@@ -38,7 +38,7 @@ export const PortfolioOverview: React.FC<PortfolioOverviewProps> = ({ onRefresh 
   const queryClient = useQueryClient();
 
   // WebSocket integration for real-time portfolio updates
-  const { state: wsState } = usePortfolioWebSocket((update) => {
+  usePortfolioWebSocket((update) => {
     // Update portfolio data with real-time WebSocket data
     queryClient.setQueryData(['portfolio'], update.data);
     onRefresh?.();

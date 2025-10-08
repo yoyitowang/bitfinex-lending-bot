@@ -5,7 +5,6 @@ from typing import Optional
 
 from ....application.services.lending_application_service import LendingApplicationService
 from ....infrastructure.dependency_injection.container import container
-from ....infrastructure.external_services.funding_market_analyzer import FundingMarketAnalyzer
 from ..middleware.auth import get_current_user
 
 router = APIRouter()
@@ -122,7 +121,7 @@ async def cancel_lending_offer(
 async def get_automated_lending_analysis(
     symbol: str,
     current_user: str = Depends(get_current_user),
-    analyzer: FundingMarketAnalyzer = Depends(lambda: container.funding_market_analyzer())
+    analyzer = Depends(lambda: container.funding_market_analyzer())
 ):
     """獲取自動借貸分析數據"""
     try:
@@ -148,7 +147,7 @@ async def execute_automated_lending(
     request: AutomatedLendingRequest,
     current_user: str = Depends(get_current_user),
     lending_service: LendingApplicationService = Depends(lambda: container.lending_application_service()),
-    analyzer: FundingMarketAnalyzer = Depends(lambda: container.funding_market_analyzer())
+    analyzer = Depends(lambda: container.funding_market_analyzer())
 ):
     """執行自動化借貸策略"""
     try:
@@ -227,7 +226,7 @@ async def check_automated_lending_conditions(
     symbol: str,
     period: int,
     current_user: str = Depends(get_current_user),
-    analyzer: FundingMarketAnalyzer = Depends(lambda: container.funding_market_analyzer())
+    analyzer = Depends(lambda: container.funding_market_analyzer())
 ):
     """檢查自動借貸條件是否滿足"""
     try:

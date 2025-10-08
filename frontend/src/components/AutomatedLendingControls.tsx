@@ -21,7 +21,6 @@ import {
 } from '@mui/material';
 import {
   PlayArrow,
-  Stop,
   Analytics,
   Warning,
   CheckCircle,

@@ -40,7 +40,7 @@ export const Lending: React.FC = () => {
     setShowForm(false);
   };
 
-  const handleAutomatedExecute = (result: any) => {
+  const handleAutomatedExecute = () => {
     setSuccessMessage('Automated lending executed successfully!');
   };
 

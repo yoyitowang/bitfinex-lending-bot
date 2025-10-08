@@ -23,7 +23,7 @@ export const useWebSocket = ({
   const { user } = useAuth();
   const [state, setState] = useState<WebSocketState>('disconnected');
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<number>();
+  const reconnectTimeoutRef = useRef<number | undefined>(undefined);
   const reconnectAttemptsRef = useRef(0);
 
   const updateState = useCallback((newState: WebSocketState) => {
@@ -134,7 +134,6 @@ export const useWebSocket = ({
 // Specific hooks for different WebSocket endpoints
 
 export const useMarketDataWebSocket = (symbol: string, onUpdate?: (update: MarketDataUpdate) => void) => {
-  const { user } = useAuth();
   const [lastUpdate, setLastUpdate] = useState<MarketDataUpdate | null>(null);
 
   const handleMessage = useCallback((message: WebSocketMessage) => {
