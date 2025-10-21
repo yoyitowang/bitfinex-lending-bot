@@ -1637,11 +1637,10 @@ class FundingLendingAutomation:
         # Strategy parameters
         base_rate = recommendation.recommended_daily_rate
 
-        # Determine actual period to use: check if APY exceeds high-rate threshold
-        actual_period = target_period
-        if recommendation.recommended_yearly_rate >= self.high_rate_apy_threshold / 100.0:
-            actual_period = self.high_rate_period
-            print(f"Debug: APY {recommendation.recommended_yearly_rate:.1f}% >= threshold {self.high_rate_apy_threshold:.1f}%, using high-rate period {self.high_rate_period} days instead of target period {target_period} days")
+        # Note: actual_period will be determined per-order below, not globally here
+        threshold_decimal = self.high_rate_apy_threshold / 100.0
+        print(f"Debug: Base rate: {base_rate*100:.6f}%, Threshold: {threshold_decimal:.6f} ({self.high_rate_apy_threshold}%)")
+        print(f"Debug: Will check each order's APY individually - if >= {self.high_rate_apy_threshold:.1f}%, use {self.high_rate_period} days, else {target_period} days")
 
         # Calculate order amounts based on strategy
         if allow_small_orders:
@@ -1730,12 +1729,21 @@ class FundingLendingAutomation:
 
             # Calculate rate for this order (start from base rate, increment by interval)
             current_rate = base_rate + (i * self.rate_interval)
+            current_order_apy = current_rate * 365
+
+            # Determine period for this specific order based on its APY
+            if current_order_apy >= threshold_decimal:
+                order_period = self.high_rate_period
+                print(f"Debug: Order {i+1} APY {current_order_apy:.1f}% >= threshold {self.high_rate_apy_threshold:.1f}% → using {self.high_rate_period} days")
+            else:
+                order_period = target_period
+                print(f"Debug: Order {i+1} APY {current_order_apy:.1f}% < threshold {self.high_rate_apy_threshold:.1f}% → using {target_period} days")
 
             order = LendingOrder(
                 amount=adjusted_amount,
                 daily_rate=current_rate,
-                period_days=actual_period,
-                yearly_rate=current_rate * 365
+                period_days=order_period,
+                yearly_rate=current_order_apy
             )
 
             orders.append(order)
