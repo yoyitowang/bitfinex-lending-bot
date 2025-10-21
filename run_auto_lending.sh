@@ -51,6 +51,8 @@ CMD_ARGS=(
 [ -n "${AUTO_LENDING_AVG_ORDER_DEPTH}" ] && CMD_ARGS+=("--avg-order-depth" "${AUTO_LENDING_AVG_ORDER_DEPTH}")
 [ -n "${AUTO_LENDING_MIN_ORDER_PERCENTAGE}" ] && CMD_ARGS+=("--min-order-percentage" "${AUTO_LENDING_MIN_ORDER_PERCENTAGE}")
 [ -n "${AUTO_LENDING_HIGH_RETURN_THRESHOLD}" ] && CMD_ARGS+=("--high-return-threshold" "${AUTO_LENDING_HIGH_RETURN_THRESHOLD}")
+[ -n "${AUTO_LENDING_HIGH_RATE_APY_THRESHOLD}" ] && CMD_ARGS+=("--high-rate-apy-threshold" "${AUTO_LENDING_HIGH_RATE_APY_THRESHOLD}")
+[ -n "${AUTO_LENDING_HIGH_RATE_PERIOD}" ] && CMD_ARGS+=("--high-rate-period" "${AUTO_LENDING_HIGH_RATE_PERIOD}")
 
 # Boolean flags
 [ "${AUTO_LENDING_CANCEL_EXISTING:-true}" = "true" ] && CMD_ARGS+=("--cancel-existing")

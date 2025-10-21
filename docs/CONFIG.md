@@ -222,6 +222,8 @@ AUTO_LENDING_INTERVAL=1800
 | `AUTO_LENDING_AMOUNT_INCREMENT_FACTOR` | `0.0` | Dynamic amount increment factor (0-1) |
 | `AUTO_LENDING_NO_CONFIRM` | `true` | Skip confirmation prompts |
 | `AUTO_LENDING_INTERVAL` | `600` | Execution interval in seconds |
+| `AUTO_LENDING_HIGH_RATE_APY_THRESHOLD` | `12.0` | APY threshold for switching to high-rate period (percentage) |
+| `AUTO_LENDING_HIGH_RATE_PERIOD` | `120` | Period in days to use when APY exceeds HIGH_RATE_APY_THRESHOLD |
 
 ### Logging
 

@@ -1129,7 +1129,7 @@ class LendingOrder:
 class FundingLendingAutomation:
     """Automated funding lending system"""
 
-    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None, rate_interval: float = 0.000005, avg_order_depth: int = 10, high_return_threshold: float = 15.0):
+    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None, rate_interval: float = 0.000005, avg_order_depth: int = 10, high_return_threshold: float = 15.0, high_rate_apy_threshold: float = 12.0, high_rate_period: int = 120):
         self.public_api = BitfinexAPI()
         self.auth_api = None
         if api_key and api_secret:
@@ -1139,6 +1139,8 @@ class FundingLendingAutomation:
         self.lowest_offer_rate = None
         self.avg_order_depth = avg_order_depth  # Number of top orders to average for rate calculation
         self.high_return_threshold = high_return_threshold  # APY threshold for high return offers (as percentage)
+        self.high_rate_apy_threshold = high_rate_apy_threshold  # APY threshold for switching to high-rate period (as percentage)
+        self.high_rate_period = high_rate_period  # Period to use when APY exceeds high_rate_apy_threshold
 
     def analyze_market_rates(self, symbol: str) -> Dict[int, MarketRateStats]:
         """
@@ -1606,11 +1608,12 @@ class FundingLendingAutomation:
 
         Strategy:
         1. Base rate = lowest offer rate from funding book
-        2. Each subsequent order increases by rate_interval (default 0.005%)
-        3. Calculate maximum number of full orders: floor(total_amount / min_order)
-        4. Apply dynamic amount adjustment: order_amount * (1 + amount_increment_factor * index)
-        5. Validate total against available balance to prevent submission failures
-        6. Adjust final orders to fit within available balance
+        2. Check if APY exceeds high_rate_apy_threshold - if so, use high_rate_period instead of target_period
+        3. Each subsequent order increases by rate_interval (default 0.005%)
+        4. Calculate maximum number of full orders: floor(total_amount / min_order)
+        5. Apply dynamic amount adjustment: order_amount * (1 + amount_increment_factor * index)
+        6. Validate total against available balance to prevent submission failures
+        7. Adjust final orders to fit within available balance
 
         Args:
             recommendation: Rate recommendation (base rate from lowest offer)
@@ -1620,7 +1623,7 @@ class FundingLendingAutomation:
             target_period: Target lending period in days
             allow_small_orders: Allow orders smaller than min_order (but still >= 150)
             amount_increment_factor: Dynamic amount adjustment factor (0-1). Each order amount
-                                   is multiplied by (1 + factor * order_index)
+                                    is multiplied by (1 + factor * order_index)
 
         Returns:
             List of LendingOrder objects (adjusted to fit available balance)
@@ -1633,6 +1636,12 @@ class FundingLendingAutomation:
 
         # Strategy parameters
         base_rate = recommendation.recommended_daily_rate
+
+        # Determine actual period to use: check if APY exceeds high-rate threshold
+        actual_period = target_period
+        if recommendation.recommended_yearly_rate >= self.high_rate_apy_threshold / 100.0:
+            actual_period = self.high_rate_period
+            print(f"Debug: APY {recommendation.recommended_yearly_rate:.1f}% >= threshold {self.high_rate_apy_threshold:.1f}%, using high-rate period {self.high_rate_period} days instead of target period {target_period} days")
 
         # Calculate order amounts based on strategy
         if allow_small_orders:
@@ -1725,7 +1734,7 @@ class FundingLendingAutomation:
             order = LendingOrder(
                 amount=adjusted_amount,
                 daily_rate=current_rate,
-                period_days=target_period,
+                period_days=actual_period,
                 yearly_rate=current_rate * 365
             )
 
@@ -2367,11 +2376,13 @@ class FundingLendingAutomation:
 @click.option('--amount-increment-factor', type=float, default=0.0, help='Dynamic amount increment factor (0-1). Each order gets base_amount * (1 + factor * index)')
 @click.option('--avg-order-depth', type=int, default=10, help='Number of top lending orders to average for rate calculation (default: 10)')
 @click.option('--high-return-threshold', type=float, default=15.0, help='APY threshold for high-return offers in percentage (default: 15.0)')
+@click.option('--high-rate-apy-threshold', type=float, default=12.0, help='APY threshold for switching to high-rate period (default: 12.0)')
+@click.option('--high-rate-period', type=int, default=120, help='Period in days to use when APY exceeds high-rate threshold (default: 120)')
 @click.option('--prioritize-high-returns/--standard-strategy', default=True, help='Prioritize any >= threshold APY offers regardless of period (default: enabled)')
 @click.option('--no-confirm', is_flag=True, help='Skip user confirmation (use with caution)')
 @click.option('--api-key', envvar='BITFINEX_API_KEY', help='Bitfinex API key')
 @click.option('--api-secret', envvar='BITFINEX_API_SECRET', help='Bitfinex API secret')
-def funding_lend_automation(symbol, total_amount, min_order, min_order_percentage, max_orders, max_rate_increment, rate_interval, target_period, cancel_existing, parallel, max_workers, allow_small_orders, amount_increment_factor, avg_order_depth, high_return_threshold, prioritize_high_returns, no_confirm, api_key, api_secret):
+def funding_lend_automation(symbol, total_amount, min_order, min_order_percentage, max_orders, max_rate_increment, rate_interval, target_period, cancel_existing, parallel, max_workers, allow_small_orders, amount_increment_factor, avg_order_depth, high_return_threshold, high_rate_apy_threshold, high_rate_period, prioritize_high_returns, no_confirm, api_key, api_secret):
     """Automated funding lending strategy with market analysis and tiered orders"""
     try:
         if not api_key or not api_secret:
@@ -2402,8 +2413,8 @@ def funding_lend_automation(symbol, total_amount, min_order, min_order_percentag
         if high_return_threshold > 100:
             raise ValueError("High return threshold cannot exceed 100%")
 
-        # Initialize automation system
-        automation = FundingLendingAutomation(api_key, api_secret, rate_interval, avg_order_depth, high_return_threshold)
+        # Initialize automation system with high-rate parameters
+        automation = FundingLendingAutomation(api_key, api_secret, rate_interval, avg_order_depth, high_return_threshold, high_rate_apy_threshold, high_rate_period)
 
         # Calculate min_order based on percentage if specified
         if min_order_percentage is not None:
